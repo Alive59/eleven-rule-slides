@@ -1,0 +1,6 @@
+node_modules/
+*.pptx
+*.pdf
+*.jpg
+*.skill
+__pycache__/
