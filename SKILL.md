@@ -10,10 +10,30 @@ Every slide must answer, on its own: what is this, what did it show, and where c
 see that. The eleven rules exist to force that; `references/eleven-rules.md` has the
 full text plus the do/don't pattern for each one. Read it before drafting content.
 
-Read `/mnt/skills/public/pptx/SKILL.md` too — it carries the pptxgenjs footguns
-(hex colors without `#`, `pres.layout` before slides, `isTextBox: true`, chart
-validation) and the render-to-image QA loop. This skill layers structure and
-typography on top of it; it does not replace it.
+If your runtime ships a general pptx skill, read it too — in Claude environments
+that is `/mnt/skills/public/pptx/SKILL.md`, which carries the render-to-image QA
+loop and the library footguns. This skill layers structure and typography on top of
+it; it does not replace it. Where no such file exists, `references/toolchain.md` has
+the footguns for both generators in short form.
+
+## Runtimes
+
+The skill runs anywhere that has one of the two generators. Pick by what the
+sandbox has, not by preference — the two produce the same geometry and both audit
+clean under the same `check_rules.py`.
+
+| Runtime | Generator | Notes |
+|---|---|---|
+| Claude Code / Claude skills | `scripts/slide_kit.js` or `scripts/slide_kit.py` | both toolchains available |
+| ChatGPT Code Interpreter, Custom GPT | `scripts/slide_kit.py` | no Node and no network there; `python-pptx` is present |
+| Codex and other coding agents | either | `AGENTS.md` at the repo root is the entry point |
+| Plain Python pipeline | `scripts/slide_kit.py` | `pip install -r requirements.txt` |
+
+The Python kit cannot define a slide master (python-pptx has no API for one), so it
+writes a real `slidenum` field onto each numbered slide instead. PowerPoint still
+renumbers the field itself, so reordering slides is safe. Everything else — zone
+geometry, the two-font split, minimum sizes, which slides carry no number — is
+identical.
 
 ## Content precedence
 
@@ -46,7 +66,8 @@ already written, then evidence, then anything new.
 0. **Ask which fonts to use** before generating anything, unless the user has
    already said or the deck being edited already has a consistent pair. One short
    question, offering the default: Calibri for English and Yu Gothic for Japanese.
-   Pass the answer as `createDeck({ fontEn, fontJa })` and audit with
+   Pass the answer as `createDeck({ fontEn, fontJa })` — `create_deck(font_en=,
+   font_ja=)` in Python — and audit with
    `--font-en` / `--font-ja` so the check matches what was asked for. The rule the
    skill enforces is that a deck is consistent about its two faces, not that the
    faces are any particular pair — a lab or venue template may specify others.
@@ -56,8 +77,9 @@ already written, then evidence, then anything new.
    sentence, the slide is not ready.
 2. **Draft the outline with chapter separators** (rule 5), then confirm with the user
    if the deck is longer than ~8 slides or the talk length is unknown.
-3. **Generate with `scripts/slide_kit.js`.** It fixes the geometry, the fonts, and
-   the page number so those rules cannot be violated by accident.
+3. **Generate with `scripts/slide_kit.js` or `scripts/slide_kit.py`.** Both fix the
+   geometry, the fonts, and the page number so those rules cannot be violated by
+   accident. Use the Python kit when the sandbox has no Node.
 4. **Audit with `scripts/check_rules.py deck.pptx`.** Fix every FAIL, then re-run.
    On an existing deck, fix only what content precedence allows — the rest is a
    report, not a task.
@@ -68,8 +90,10 @@ The sandbox renderer usually lacks Calibri and Yu Gothic and sometimes drops bul
 glyphs, so judge the preview on layout, overflow, and figure size — not on the exact
 glyph shapes. The audit reads the XML, so it is the authority on fonts and sizes.
 
-Dependencies: `pptxgenjs` (npm, preinstalled) for generation, `python-pptx` for the
-audit, LibreOffice + `pdftoppm` for the render.
+Dependencies: `python-pptx` always (the audit needs it, and the Python kit is built
+on it); `pptxgenjs` (npm) only for the JS kit; `Pillow` for aspect-correct image
+placement from the Python kit; LibreOffice + `pdftoppm` for the render. `pip install
+-r requirements.txt` covers the Python side.
 
 ## Fixed layout (LAYOUT_WIDE, 13.333 x 7.5 in)
 
@@ -99,8 +123,8 @@ when there are one or two of them.
 
 - Two faces per deck: one for Latin text, one for Japanese. The default pair is
   **Calibri** and **Yu Gothic**; ask the user first (workflow step 0) and pass
-  theirs to `createDeck({ fontEn, fontJa })`. `slide_kit.js` splits mixed strings
-  run-by-run automatically — pass one string and it handles the switch, writing the
+  theirs to `createDeck({ fontEn, fontJa })` / `create_deck(font_en=, font_ja=)`.
+  Both kits split mixed strings run-by-run automatically — pass one string and it handles the switch, writing the
   Latin face to `<a:latin>` and the Japanese face to `<a:ea>` so PowerPoint picks
   the right one per glyph.
 - Title 32pt and up, body 20pt and up. Text inside a diagram, flow chart, or any
@@ -153,9 +177,11 @@ sense, insert a chapter separator slide instead and drop the prefix (rule 5).
 When the sentence and the part of the figure it refers to are not obviously paired,
 mark it (rule 8):
 
-- `redBox(slide, {x, y, w, h})` — red enclosure around the row, bar, or region.
-- `balloon(slide, {text, x, y, w, h, pointTo: {x, y}})` — for supplementary text
-  that must sit next to the figure rather than in the summary (rule 9).
+- `redBox(slide, {x, y, w, h})` / `red_box(slide, x=, y=, w=, h=)` — red enclosure
+  around the row, bar, or region.
+- `balloon(slide, {text, x, y, w, h, pointTo: {x, y}})` /
+  `balloon(slide, text=, x=, y=, w=, h=, point_to={"x":, "y":})` — for supplementary
+  text that must sit next to the figure rather than in the summary (rule 9).
 
 One or two per slide. If a slide needs five enclosures, it is carrying two slides
 worth of content.
@@ -165,6 +191,7 @@ worth of content.
 | Script | Use |
 |---|---|
 | `scripts/slide_kit.js` | `require()` it from the generator script; provides `createDeck`, `addContentSlide`, `addChapterSlide`, `addTitleSlide`, `addClosingSlide`, `fitImages`, `redBox`, `balloon`, `caption` |
+| `scripts/slide_kit.py` | same kit on `python-pptx`, snake_case: `create_deck`, `add_content_slide`, `add_chapter_slide`, `add_title_slide`, `add_closing_slide`, `fit_images`, `red_box`, `balloon`, `caption`, then `deck.save(path)` |
 | `scripts/check_rules.py deck.pptx [--font-en F --font-ja F]` | Audits fonts, sizes, bullet counts, page number, margins, evidence-zone use. FAIL must be fixed; WARN needs a reason |
 | `scripts/page_number.py` | `add_page_number(slide, n, slide_w)` — drops a 28pt black `slidenum` field at the right-top of an existing deck; returns False and skips cover, separator and closing slides. Use it when retrofitting a deck you did not generate |
 
@@ -186,6 +213,23 @@ const { slide, zone } = addContentSlide(deck, {
 fitImages(slide, zone, [{ path: 'map.png', caption: 'Scope of the study area' }]);
 redBox(slide, { x: 6.2, y: 4.0, w: 2.4, h: 1.1 });
 deck.pres.writeFile({ fileName: 'talk.pptx' });
+```
+
+The same deck in Python:
+
+```python
+import sys; sys.path.insert(0, 'scripts')
+from slide_kit import create_deck, add_content_slide, add_chapter_slide, fit_images, red_box
+
+deck = create_deck(font_en='Calibri', font_ja='Yu Gothic')
+add_chapter_slide(deck, 'Chapter 3: Method')
+slide, zone = add_content_slide(deck, title='Dataset and study area', summary=[
+    'Test data: **81,348** patches (1,024 px) over the **4** validation areas.',
+    'Training data: **1,222** images with **186,000+** annotated instances.',
+])
+fit_images(slide, zone, [{'path': 'map.png', 'caption': 'Scope of the study area'}])
+red_box(slide, x=6.2, y=4.0, w=2.4, h=1.1)
+deck.save('talk.pptx')
 ```
 
 ## Reviewing an existing deck

@@ -7,11 +7,16 @@ titles short; red enclosures link a claim to the part of the figure that proves 
 
 The skill does two things that a prompt alone does not:
 
-- **`scripts/slide_kit.js`** makes the layout rules structural. Zone geometry, the
-  two-font split, minimum sizes, and the page number are fixed by the generator, so
-  a deck cannot violate them by accident.
-- **`scripts/check_rules.py`** audits a finished `.pptx` — including decks the kit
-  did not build — and reports what is mechanically wrong, slide by slide.
+- **`scripts/slide_kit.py`** (python-pptx) and **`scripts/slide_kit.js`**
+  (pptxgenjs) make the layout rules structural. Zone geometry, the two-font split,
+  minimum sizes, and the page number are fixed by the generator, so a deck cannot
+  violate them by accident. The two kits are ports of each other: same geometry,
+  same output under the audit — use whichever the sandbox has.
+- **`scripts/check_rules.py`** audits a finished `.pptx` — including decks neither
+  kit built — and reports what is mechanically wrong, slide by slide.
+
+It runs under Claude (`SKILL.md`), under Codex and other coding agents
+(`AGENTS.md`), and as a ChatGPT Custom GPT (`gpt/instructions.md`).
 
 ## Layout
 
@@ -29,7 +34,23 @@ separator, and closing slides carry no page number.
 
 ## Usage
 
-Generate:
+Generate, in Python:
+
+```python
+import sys; sys.path.insert(0, 'scripts')
+from slide_kit import create_deck, add_content_slide, fit_images
+
+deck = create_deck(font_en='Calibri', font_ja='Yu Gothic')
+slide, zone = add_content_slide(
+    deck,
+    title='Accuracy by input class',
+    summary=['Trained on **1.3M** samples; IoU reached **0.79**.'],
+)
+fit_images(slide, zone, [{'path': 'fig.png', 'caption': 'Held-out split'}])
+deck.save('talk.pptx')
+```
+
+or in Node:
 
 ```js
 const { createDeck, addContentSlide, fitImages } = require('./scripts/slide_kit.js');
@@ -70,7 +91,8 @@ specific, whether a figure is large enough to read. Render the deck and look at 
 Retrofitting a deck you did not generate:
 
 ```python
-from scripts.page_number import add_page_number
+import sys; sys.path.insert(0, 'scripts')
+from page_number import add_page_number
 add_page_number(slide, n, slide_width_inches)   # skips covers and separators
 ```
 
@@ -81,16 +103,59 @@ position, and size; add new material into the space that remains; if it does not
 fit, say so rather than displacing what is there. Enlarging body text into a figure
 trades a font violation for an overlap.
 
-## Installing as a Claude skill
+## Installing
 
-Zip the repository contents so that `SKILL.md` sits at the root of the archive, and
-rename it to `.skill`:
+**Claude skill** — zip the repository contents so that `SKILL.md` sits at the root
+of the archive, and rename it to `.skill`:
 
 ```bash
-zip -r eleven-rule-slides.skill SKILL.md references scripts
+zip -r eleven-rule-slides.skill SKILL.md references scripts requirements.txt
 ```
+
+Or clone it into the skills directory:
+
+```bash
+git clone https://github.com/Alive59/eleven-rule-slides.git ~/.claude/skills/eleven-rule-slides
+```
+
+**Codex and other coding agents** — clone the repository; `AGENTS.md` at the root is
+the entry point and points at `SKILL.md`.
+
+**ChatGPT Custom GPT** — `gpt/README.md` has the setup: `gpt/instructions.md` into
+the Instructions box, the scripts and references into Knowledge, Code Interpreter
+enabled.
 
 ## Requirements
 
-`pptxgenjs` (npm) to generate, `python-pptx` to audit, LibreOffice and `pdftoppm`
-to render for visual QA.
+`python-pptx` for the audit and the Python generator; `Pillow` for aspect-correct
+figure placement; `pptxgenjs` (npm) only for the Node generator; LibreOffice and
+`pdftoppm` to render for visual QA.
+
+```bash
+pip install -r requirements.txt
+npm install pptxgenjs   # only if you use the Node kit
+```
+
+ChatGPT Code Interpreter has `python-pptx` and `Pillow` but no Node and no
+LibreOffice, which is why the Python kit exists and why a GPT cannot do the visual
+QA pass.
+
+## Layout of the repository
+
+```
+SKILL.md                    the specification (Claude skill entry point)
+AGENTS.md                   entry point for Codex and other coding agents
+gpt/instructions.md         condensed build for a ChatGPT Custom GPT
+gpt/README.md               how to wire up the Custom GPT
+references/eleven-rules.md  the eleven rules, with a do/don't per rule
+references/toolchain.md     pptxgenjs and python-pptx footguns, render QA
+scripts/slide_kit.py        generator (python-pptx)
+scripts/slide_kit.js        generator (pptxgenjs)
+scripts/check_rules.py      audit any .pptx against the mechanical rules
+scripts/page_number.py      retrofit page numbers onto a deck you did not build
+examples/example_deck.py    runnable example (Python)
+examples/example_deck.js    runnable example (Node)
+tests/test_python_kit.py    smoke tests for the Python kit
+```
+
+Run the tests with `pytest tests/` or `python tests/test_python_kit.py`.

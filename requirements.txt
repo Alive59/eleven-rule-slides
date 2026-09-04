@@ -1,0 +1,5 @@
+# Audit (check_rules.py, page_number.py) and the Python generator (slide_kit.py).
+python-pptx>=0.6.21
+# Optional: aspect-correct image placement in fit_images(). Without it figures are
+# stretched to their cell.
+Pillow>=9.0

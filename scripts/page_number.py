@@ -17,15 +17,15 @@ FLD = (
     '<a:p xmlns:a="%s">'
     '<a:pPr algn="r"/>'
     '<a:fld id="{{1D0E7A29-9A6B-4C5E-9F0A-{n:012d}}}" type="slidenum">'
-    '<a:rPr lang="en-US" sz="%d" b="0" dirty="0">'
+    '<a:rPr lang="en-US" sz="{sz}" b="0" dirty="0">'
     '<a:solidFill><a:srgbClr val="000000"/></a:solidFill>'
-    '<a:latin typeface="Calibri"/><a:cs typeface="Calibri"/>'
+    '<a:latin typeface="{font}"/><a:cs typeface="{font}"/>'
     '</a:rPr>'
     '<a:t>{n}</a:t>'
     '</a:fld>'
-    '<a:endParaRPr lang="en-US" sz="%d"/>'
+    '<a:endParaRPr lang="en-US" sz="{sz}"/>'
     '</a:p>'
-) % (A, PT * 100, PT * 100)
+) % A
 
 VISUAL = (MSO_SHAPE_TYPE.PICTURE, MSO_SHAPE_TYPE.LINKED_PICTURE,
           MSO_SHAPE_TYPE.TABLE, MSO_SHAPE_TYPE.CHART, MSO_SHAPE_TYPE.GROUP)
@@ -50,14 +50,27 @@ def is_cover(slide):
     return big > 0 and body == 0
 
 
-def add_page_number(slide, n, slide_w):
-    if is_cover(slide):
-        return False
+def place_page_number_field(slide, n, slide_w, font='Calibri'):
+    """Write the field unconditionally, no cover heuristic. Returns the textbox.
+
+    ``n`` only seeds the cached text; PowerPoint recomputes the field on open, so
+    a deck whose slides are reordered still numbers correctly. Callers that know
+    which slides are numbered -- slide_kit.py -- use this; callers retrofitting a
+    finished deck use add_page_number() instead.
+    """
     box = slide.shapes.add_textbox(Inches(slide_w - BOX_W - RIGHT_PAD), Inches(TOP),
                                    Inches(BOX_W), Inches(BOX_H))
     box.text_frame.word_wrap = False
     tx = box.text_frame._txBody
     for p in tx.findall(qn('a:p')):
         tx.remove(p)
-    tx.append(parse_xml(FLD.format(n=n)))
+    tx.append(parse_xml(FLD.format(n=n, sz=PT * 100, font=font)))
+    return box
+
+
+def add_page_number(slide, n, slide_w, font='Calibri'):
+    """Retrofit: number this slide unless it is a cover, separator or closing slide."""
+    if is_cover(slide):
+        return False
+    place_page_number_field(slide, n, slide_w, font)
     return True
