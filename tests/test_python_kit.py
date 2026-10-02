@@ -112,7 +112,11 @@ def test_mixed_script_runs_carry_both_faces():
 def test_summary_cap_is_enforced():
     deck = create_deck()
     for bad, msg in ((dict(title="t", summary=["a"] * 5), "rule 6"),
-                     (dict(title="", summary=["a"]), "rule 4")):
+                     (dict(title="", summary=["a"]), "rule 4"),
+                     (dict(title="Accuracy improves with LoD2 input.", summary=["a"]),
+                      "rule 4"),
+                     (dict(title="LoD2入力で精度が向上した", summary=["a"]), "rule 4"),
+                     (dict(title="We compare baselines", summary=["a"]), "rule 4")):
         try:
             add_content_slide(deck, **bad)
         except ValueError as e:
@@ -159,3 +163,13 @@ if __name__ == "__main__":
                 print(f"FAIL {name}: {e}")
     print(f"\n{fails} failure(s)")
     sys.exit(1 if fails else 0)
+
+
+def test_title_sentence_reason():
+    from slide_kit import title_sentence_reason
+    for ok in ("Accuracy by input class", "Comparison with baselines in dense areas",
+               "入力クラス別の再構成精度", "Dataset and study area", "Error patterns"):
+        assert title_sentence_reason(ok) is None, ok
+    for bad in ("Results are good.", "精度が向上した", "提案手法の評価です",
+                "Our method outperforms baselines", "What is BMQI?"):
+        assert title_sentence_reason(bad), bad

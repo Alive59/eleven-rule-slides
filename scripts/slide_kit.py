@@ -47,7 +47,8 @@ except ImportError:  # pragma: no cover
 __all__ = [
     "create_deck", "new_slide", "add_content_slide", "add_chapter_slide",
     "add_title_slide", "add_closing_slide", "fit_images", "red_box", "balloon",
-    "caption", "to_runs", "set_fonts", "Deck", "G", "RED", "GRAY", "BLACK",
+    "caption", "to_runs", "set_fonts", "title_sentence_reason", "Deck", "G", "RED",
+    "GRAY", "BLACK",
 ]
 
 # Defaults; override per deck with create_deck(font_en=..., font_ja=...) once the
@@ -64,6 +65,33 @@ CJK_RE = re.compile(
     r"[　-〿぀-ゟ゠-ヿ㐀-䶿一-鿿＀-￯]"
 )
 BOLD_SPLIT_RE = re.compile(r"(\*\*[^*]+\*\*)")
+
+# Rule 4: a title is a compact keyword phrase, never a sentence. The claim belongs
+# in the summary block. Keep these three patterns in sync with check_rules.py and
+# slide_kit.js.
+TITLE_TERMINAL_RE = re.compile(r"[.。!！?？]\s*$")
+TITLE_JA_PREDICATE_RE = re.compile(
+    r"(です|ます|ました|ません|でした|である|だった|した|する|される|された|"
+    r"できる|できた|いる|ない|なった|なる)[。.!！?？]?\s*$")
+TITLE_EN_VERB_RE = re.compile(
+    r"\b(is|are|was|were|has|have|had|does|do|did|can|could|will|would|should|"
+    r"we|our|improves?|improved|outperforms?|outperformed|reduces?|reduced|"
+    r"increases?|increased|decreases?|decreased|achieves?|achieved|shows?|showed|"
+    r"enables?|enabled|yields?|yielded|reaches|reached|fails|failed|leads|led)\b",
+    re.I)
+
+
+def title_sentence_reason(title):
+    """Return why `title` reads as a sentence, or None if it is a keyword phrase."""
+    t = (title or "").strip()
+    if TITLE_TERMINAL_RE.search(t):
+        return "ends with sentence punctuation"
+    if TITLE_JA_PREDICATE_RE.search(t):
+        return "ends with a Japanese predicate"
+    m = TITLE_EN_VERB_RE.search(t)
+    if m:
+        return f"contains the verb/subject '{m.group(0)}'"
+    return None
 
 G = {
     "W": 13.333,
@@ -259,6 +287,11 @@ def add_content_slide(deck, title=None, summary=(), notes=None):
     """
     if not title:
         raise ValueError("rule 4: every slide needs a keyword title")
+    why = title_sentence_reason(title)
+    if why:
+        raise ValueError(
+            f"rule 4: title '{title}' reads as a sentence ({why}); use a compact "
+            "keyword phrase and move the claim into the summary")
     summary = list(summary)
     if len(summary) > 4:
         raise ValueError(

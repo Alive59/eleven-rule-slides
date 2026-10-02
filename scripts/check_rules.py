@@ -37,6 +37,20 @@ RESULT_TITLE_RE = re.compile(
 GENERIC_TITLE_RE = re.compile(
     r"^[\d.\s]*(results?|discussion|method|conclusion|introduction|experiments?|"
     r"background|overview|summary|まとめ|結果|考察|手法|概要|背景)\s*(\[\d/\d\])?$", re.I)
+# Rule 4: a title is a compact keyword phrase, never a sentence. Keep in sync with
+# slide_kit.py / slide_kit.js.
+TITLE_TERMINAL_RE = re.compile(r"[.。!！?？]\s*$")
+TITLE_JA_PREDICATE_RE = re.compile(
+    r"(です|ます|ました|ません|でした|である|だった|した|する|される|された|"
+    r"できる|できた|いる|ない|なった|なる)[。.!！?？]?\s*$")
+TITLE_EN_VERB_RE = re.compile(
+    r"\b(is|are|was|were|has|have|had|does|do|did|can|could|will|would|should|"
+    r"we|our|improves?|improved|outperforms?|outperformed|reduces?|reduced|"
+    r"increases?|increased|decreases?|decreased|achieves?|achieved|shows?|showed|"
+    r"enables?|enabled|yields?|yielded|reaches|reached|fails|failed|leads|led)\b",
+    re.I)
+MAX_TITLE_WORDS = 8     # Latin words in a compact title
+MAX_TITLE_JA_CHARS = 20 # characters in a compact Japanese title
 
 TITLE_SEARCH_Y = 1.60   # in — the title must start within this of the top
 FALLBACK_EVIDENCE_Y = 2.75
@@ -270,8 +284,25 @@ def check_slide(slide, slide_w, slide_h):
                               "separator slide carries that instead")
         if len(t.strip()) < 4:
             warn("4 title", f"title is just '{t}' — looks like an unfinished placeholder")
-        if len(t) > 70:
-            warn("4 title", f"title is {len(t)} chars; shorten to a keyword phrase")
+        if TITLE_TERMINAL_RE.search(t):
+            fail("4 title", f"title '{t}' ends like a sentence — use a compact "
+                            "keyword phrase; the claim goes in the summary")
+        elif TITLE_JA_PREDICATE_RE.search(t):
+            fail("4 title", f"title '{t}' ends with a predicate — use a noun phrase "
+                            "(e.g. '…の精度'); the claim goes in the summary")
+        else:
+            m = TITLE_EN_VERB_RE.search(t)
+            if m:
+                warn("4 title", f"title '{t}' contains '{m.group(0)}' and may be a "
+                                "sentence — use a compact keyword phrase")
+        n_words = len(re.findall(r"[A-Za-z0-9][\w'’\-]*", CJK_RE.sub(" ", t)))
+        n_ja = len(CJK_RE.findall(t))
+        if n_words > MAX_TITLE_WORDS:
+            warn("4 title", f"title has {n_words} words; compact it to "
+                            f"{MAX_TITLE_WORDS} or fewer keywords")
+        elif n_ja > MAX_TITLE_JA_CHARS:
+            warn("4 title", f"title has {n_ja} Japanese characters; compact it to "
+                            f"{MAX_TITLE_JA_CHARS} or fewer")
 
     if not summary_paras:
         fail("1 composition", "no summary sentences below the title")
