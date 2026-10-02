@@ -102,6 +102,27 @@ function createDeck(opts = {}) {
   return { pres, G };
 }
 
+// Rule 4: a title is a compact keyword phrase, never a sentence. The claim belongs
+// in the summary block. Keep these patterns in sync with slide_kit.py and check_rules.py.
+const TITLE_TERMINAL_RE = /[.。!！?？]\s*$/;
+const TITLE_JA_PREDICATE_RE =
+  /(です|ます|ました|ません|でした|である|だった|した|する|される|された|できる|できた|いる|ない|なった|なる)[。.!！?？]?\s*$/;
+const TITLE_EN_VERB_RE = new RegExp(
+  '\\b(is|are|was|were|has|have|had|does|do|did|can|could|will|would|should|' +
+  'we|our|improves?|improved|outperforms?|outperformed|reduces?|reduced|' +
+  'increases?|increased|decreases?|decreased|achieves?|achieved|shows?|showed|' +
+  'enables?|enabled|yields?|yielded|reaches|reached|fails|failed|leads|led)\\b', 'i');
+
+/** Why `title` reads as a sentence, or null if it is a keyword phrase. */
+function titleSentenceReason(title) {
+  const t = String(title || '').trim();
+  if (TITLE_TERMINAL_RE.test(t)) return 'ends with sentence punctuation';
+  if (TITLE_JA_PREDICATE_RE.test(t)) return 'ends with a Japanese predicate';
+  const m = t.match(TITLE_EN_VERB_RE);
+  if (m) return `contains the verb/subject '${m[0]}'`;
+  return null;
+}
+
 function newSlide(deck, numbered = true) {
   return deck.pres.addSlide({ masterName: numbered ? 'ELEVEN_RULE' : 'ELEVEN_RULE_PLAIN' });
 }
@@ -112,6 +133,11 @@ function newSlide(deck, numbered = true) {
  */
 function addContentSlide(deck, { title, summary = [], notes } = {}) {
   if (!title) throw new Error('rule 4: every slide needs a keyword title');
+  const why = titleSentenceReason(title);
+  if (why) {
+    throw new Error(`rule 4: title '${title}' reads as a sentence (${why}); ` +
+      'use a compact keyword phrase and move the claim into the summary');
+  }
   if (summary.length > 4) {
     throw new Error(`rule 6: ${summary.length} summary sentences; split the slide (max 4)`);
   }
@@ -259,7 +285,7 @@ function caption(slide, { text, x, y, w, h = 0.35, align = 'left' }) {
 
 module.exports = {
   createDeck, newSlide, addContentSlide, addChapterSlide, addTitleSlide, addClosingSlide,
-  fitImages, redBox, balloon, caption, toRuns, setFonts,
+  fitImages, redBox, balloon, caption, toRuns, setFonts, titleSentenceReason,
   G, RED, GRAY,
   get EN_FONT() { return EN_FONT; },
   get JA_FONT() { return JA_FONT; },

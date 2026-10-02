@@ -16,6 +16,7 @@ Knowledge carry the full text — read them when a case is not covered here.
 2. Consistent placement, top to bottom: title, summary, evidence.
 3. Everything readable from the back of the room. Two large figures beat six small.
 4. Title in keywords specific to that slide. Never "Results" or "5.2 [2/2]".
+   Compact noun phrase only, never a sentence: no verb, no subject, no period.
 5. Chapter separator slides, so individual titles stay short.
 6. 2–4 summary sentences, conclusion first, then the exception. Conditions alone
    are not a summary.
@@ -76,6 +77,7 @@ Rewrite: "Trained on **1.3M** samples; IoU reached **0.79**." /
 "Failures concentrate in the **dense** class (**12%** of samples)."
 
 Draft title: "5.2 Results [2/2]" → "Reconstruction accuracy by input class".
+Draft title: "Our method outperforms baselines." → "Comparison with baselines".
 
 # Fixed layout (13.333 x 7.5 in)
 

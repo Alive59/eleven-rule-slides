@@ -27,7 +27,8 @@ survivors.
 **4. Easy-to-understand title.** Express the title with keywords characteristic of
 that slide. "5.2 Aggregated result [2/2]" tells the audience nothing;
 "Result of extraction (Error pattern analysis)" tells them what they are about
-to look at.
+to look at. Keep it compact: descriptive words only, as a noun phrase — never a
+sentence. The finding goes in the summary sentences (rule 6), not in the title.
 
 **5. Chapter separator slides.** Insert a slide between chapters ("Chapter 6: Case
 study") so the individual titles can stay short and concrete instead of carrying
@@ -77,6 +78,8 @@ made — is supplementary (rule 9) and goes beside the figure, not in the block.
 ## Common violations to check for in a draft
 
 - Title is a section number or a generic noun (rule 4).
+- Title is a sentence — a verb, a subject, or ending punctuation — instead of a
+  compact keyword phrase (rule 4).
 - Five or more bullets, or one bullet that runs three lines (rule 6).
 - Summary states what was done but never what came out of it (rules 1, 6).
 - No digits anywhere in the summary of a results or problem-setting slide (rule 7).

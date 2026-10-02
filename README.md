@@ -85,6 +85,9 @@ results slide with no numeral. Zones are inferred per slide, so decks built
 elsewhere are checked correctly. Text inside a group, a diagram, or a flow chart is
 artwork and is exempt from the font and size rules.
 
+Titles written as sentences (ending punctuation, a Japanese predicate ending, a
+finite verb) and overlong titles are flagged as well.
+
 What it cannot check: whether a sentence states a conclusion, whether a title is
 specific, whether a figure is large enough to read. Render the deck and look at it.
 

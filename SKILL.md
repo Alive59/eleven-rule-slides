@@ -72,7 +72,7 @@ already written, then evidence, then anything new.
    skill enforces is that a deck is consistent about its two faces, not that the
    faces are any particular pair — a lab or venue template may specify others.
 1. **Collect the content before touching code.** For each planned slide write, in
-   plain text: the title keyword, the 2-4 summary sentences, and which figure or
+   plain text: the title (a compact keyword phrase, not a sentence), the 2-4 summary sentences, and which figure or
    table is the evidence. If a summary sentence has no evidence, or a figure has no
    sentence, the slide is not ready.
 2. **Draft the outline with chapter separators** (rule 5), then confirm with the user
@@ -171,6 +171,25 @@ Rewrite title: "Reconstruction accuracy by input class"
 Keyword-led and specific to that one slide (rule 4). Never a bare section number or
 a generic label ("Results", "Discussion"). If a title needs a chapter prefix to make
 sense, insert a chapter separator slide instead and drop the prefix (rule 5).
+
+A title is a **compact noun phrase of descriptive words, never a sentence.** It names
+what the slide is about; the claim about it belongs in the summary sentences.
+
+- No verb, no subject, no ending punctuation. "Accuracy by input class", not
+  "Accuracy improves with LoD2 input." In Japanese, end on a noun (「入力クラス別の
+  再構成精度」), not a predicate (「LoD2入力で精度が向上した」).
+- Aim for 2-6 words (about 8 at most), or 20 Japanese characters at most.
+- If the draft title is a finding, move it into the first summary sentence and keep
+  only its subject as the title.
+
+The kits reject a title that ends in sentence punctuation, ends on a Japanese
+predicate, or contains a finite verb or "we/our"; `check_rules.py` fails the first
+two and warns on the rest and on long titles.
+
+**Example 3:**
+Draft title: "The proposed method outperforms baselines on dense areas"
+Rewrite title: "Comparison with baselines in dense areas"
+(The finding, with its number, goes in the first summary sentence.)
 
 ## Linking claims to evidence
 
