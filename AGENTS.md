@@ -39,7 +39,8 @@ all fall in the first row. `pip install -r requirements.txt` is the only setup.
 - Do not edit content the user did not ask you to touch, even when it violates a
   rule. Report it and let them decide (SKILL.md, *Content precedence*).
 - Title 32pt and up, body 20pt and up, page number 28pt pure black at the
-  right-top. Cover, chapter-separator and closing slides carry no page number.
+  right-top, placed once on the slide master. Every slide is numbered except the
+  title and acknowledgement slides, which use a layout that hides master shapes.
 - Two font faces per deck, one Latin and one Japanese, written per run as
   `<a:latin>` and `<a:ea>`. Use the kit's `to_runs()` / `toRuns()`; a raw
   `run.font.name` styles only half of a mixed sentence.
@@ -56,7 +57,7 @@ references/toolchain.md     pptxgenjs and python-pptx footguns, render QA
 scripts/slide_kit.py        generator (python-pptx)
 scripts/slide_kit.js        generator (pptxgenjs)
 scripts/check_rules.py      audit any .pptx against the mechanical rules
-scripts/page_number.py      retrofit page numbers onto a deck you did not build
+scripts/page_number.py      master page number; retrofit onto a deck you did not build
 examples/example_deck.py    runnable example (Python)
 examples/example_deck.js    runnable example (Node)
 tests/test_python_kit.py    smoke tests: audit passes, geometry, font runs

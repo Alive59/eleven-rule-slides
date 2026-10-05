@@ -37,7 +37,7 @@ from pptx.util import Emu, Inches, Pt
 # scripts/ is a plain directory, not a package: make the sibling importable either
 # way (python scripts/gen.py, or sys.path.append("scripts") from elsewhere).
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from page_number import place_page_number_field  # noqa: E402
+from page_number import install_master_page_number, plain_layout  # noqa: E402
 
 try:  # optional -- only needed for "contain" image sizing
     from PIL import Image
@@ -115,11 +115,12 @@ def set_fonts(font_en=None, font_ja=None):
 
 
 class Deck:
-    """A presentation plus the page-number counter the masters cannot carry.
+    """A presentation whose slide master carries the page number.
 
-    python-pptx cannot define a slide master, so the page number is written as a
-    real ``slidenum`` field onto each numbered slide instead of onto a master.
-    PowerPoint renumbers the field itself; ``n`` only seeds the cached text.
+    The 28pt black ``slidenum`` field sits once on the slide master, so every slide
+    on the numbered layout -- including slides added later in PowerPoint -- prints
+    its own number. The title and acknowledgement slides use a copy of the layout
+    that hides master shapes, so they print none.
     """
 
     def __init__(self, prs, font_en, font_ja):
@@ -127,6 +128,11 @@ class Deck:
         self.font_en = font_en
         self.font_ja = font_ja
         self.G = G
+        self.layout = _blank_layout(prs)
+        # a template's blank layout may hide master shapes; the number must show
+        self.layout._element.attrib.pop("showMasterSp", None)
+        install_master_page_number(self.layout.slide_master, G["W"], font=font_en)
+        self.plain_layout = plain_layout(prs, self.layout)
 
     @property
     def slide_count(self):
@@ -271,12 +277,12 @@ def _blank_layout(prs):
 
 
 def new_slide(deck, numbered=True):
-    """Blank slide; with ``numbered`` a 28pt black page-number field at right-top."""
-    slide = deck.prs.slides.add_slide(_blank_layout(deck.prs))
+    """Blank slide. ``numbered`` picks the layout that shows the master's page
+    number; ``numbered=False`` is only for the title and acknowledgement slides."""
+    layout = deck.layout if numbered else deck.plain_layout
+    slide = deck.prs.slides.add_slide(layout)
     for shape in list(slide.shapes):  # a layout placeholder would print its prompt text
         shape._element.getparent().remove(shape._element)
-    if numbered:
-        place_page_number_field(slide, deck.slide_count, G["W"], font=deck.font_en)
     return slide
 
 
@@ -317,8 +323,8 @@ def add_content_slide(deck, title=None, summary=(), notes=None):
     return slide, dict(G["evidence"])
 
 
-def _banner_slide(deck, text, size=40, y=2.8, h=1.9):
-    slide = new_slide(deck, numbered=False)
+def _banner_slide(deck, text, size=40, y=2.8, h=1.9, numbered=True):
+    slide = new_slide(deck, numbered=numbered)
     tf = _textbox(slide, 1.0, y, 11.3, h, anchor=MSO_ANCHOR.MIDDLE,
                   align=PP_ALIGN.CENTER).text_frame
     to_runs(tf.paragraphs[0], text, size, bold=True)
@@ -326,13 +332,13 @@ def _banner_slide(deck, text, size=40, y=2.8, h=1.9):
 
 
 def add_chapter_slide(deck, title):
-    """Chapter separator (rule 5): title only, centered, no page number."""
+    """Chapter separator (rule 5): title only, centered, numbered like any slide."""
     return _banner_slide(deck, title)
 
 
 def add_closing_slide(deck, text):
-    """Closing slide (e.g. the thanks line): no page number."""
-    return _banner_slide(deck, text)
+    """Acknowledgement / closing slide (e.g. the thanks line): no page number."""
+    return _banner_slide(deck, text, numbered=False)
 
 
 def add_title_slide(deck, title=None, subtitle=None, lines=()):

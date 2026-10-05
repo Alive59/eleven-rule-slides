@@ -24,13 +24,14 @@ Canvas is `LAYOUT_WIDE`, 13.333 x 7.5 in.
 
 | Zone | x, y, w, h (in) | Type |
 |---|---|---|
-| Page number | 11.98, 0.18, 0.95, 0.55 | auto field, right-top, 28pt black |
+| Page number | 11.98, 0.18, 0.95, 0.55 | field on the slide master, right-top, 28pt black |
 | Title | 0.6, 0.28, 11.5, 0.75 | 32pt bold, one line |
 | Summary | 0.6, 1.15, 12.1, ≤ 1.5 | 20pt bullets, 2–4 of them |
 | Evidence | 0.6, 2.75, 12.1, 4.35 | figures, tables, charts |
 
-The evidence zone is 58% of the slide height and is reserved. Cover, chapter
-separator, and closing slides carry no page number.
+The evidence zone is 58% of the slide height and is reserved. The page number
+lives on the slide master, so every slide inherits it; only the title and
+acknowledgement slides go without, via a layout that hides master shapes.
 
 ## Usage
 
@@ -155,7 +156,7 @@ references/toolchain.md     pptxgenjs and python-pptx footguns, render QA
 scripts/slide_kit.py        generator (python-pptx)
 scripts/slide_kit.js        generator (pptxgenjs)
 scripts/check_rules.py      audit any .pptx against the mechanical rules
-scripts/page_number.py      retrofit page numbers onto a deck you did not build
+scripts/page_number.py      master page number; retrofit onto a deck you did not build
 examples/example_deck.py    runnable example (Python)
 examples/example_deck.js    runnable example (Node)
 tests/test_python_kit.py    smoke tests for the Python kit
