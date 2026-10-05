@@ -4,7 +4,8 @@
 
 Asserts what the port has to preserve: the audit passes on a generated deck, the
 geometry matches slide_kit.js, mixed Latin/Japanese runs carry both typefaces, and
-the page number lands on content slides only.
+the page number lives on the slide master and prints on every slide except the
+title and acknowledgement slides.
 """
 import re
 import subprocess
@@ -18,7 +19,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from pptx import Presentation  # noqa: E402
 from pptx.util import Inches  # noqa: E402
 
-from page_number import add_page_number  # noqa: E402
+from page_number import add_page_number, number_deck_on_master  # noqa: E402
+from check_rules import find_page_number  # noqa: E402
 from slide_kit import (  # noqa: E402
     add_chapter_slide, add_closing_slide, add_content_slide, add_title_slide,
     balloon, caption, create_deck, fit_images, red_box,
@@ -76,9 +78,15 @@ def test_geometry_and_page_numbers():
         assert round(prs.slide_width / EMU_IN, 2) == 13.33
         assert round(prs.slide_height / EMU_IN, 2) == 7.5
 
-        numbered = [i for i, s in enumerate(prs.slides, 1)
-                    if any("slidenum" in sh._element.xml for sh in s.shapes)]
-        assert numbered == [3], f"only content slides carry a number, got {numbered}"
+        per_slide = [i for i, s in enumerate(prs.slides, 1)
+                     if any("slidenum" in sh._element.xml for sh in s.shapes)]
+        assert per_slide == [], f"no per-slide number objects, got {per_slide}"
+        where = [find_page_number(s)[1] for s in prs.slides]
+        assert where == [None, "master", "master", None], \
+            f"title and acknowledgement unnumbered, the rest from the master: {where}"
+        sh, _ = find_page_number(prs.slides[1])
+        assert round(sh.left / EMU_IN, 2) > 11 and round(sh.top / EMU_IN, 2) < 0.3
+        assert 'sz="2800"' in sh._element.xml and 'val="000000"' in sh._element.xml
 
         content = prs.slides[2]
         boxes = {round(sh.top / EMU_IN, 2): round(sh.left / EMU_IN, 2)
@@ -149,6 +157,60 @@ def test_retrofit_skips_covers():
         prs2 = Presentation(str(out))
         assert not any("slidenum" in sh._element.xml for sh in prs2.slides[0].shapes)
         assert any("slidenum" in sh._element.xml for sh in prs2.slides[1].shapes)
+
+
+def _audit(path):
+    r = subprocess.run([sys.executable, str(ROOT / "scripts" / "check_rules.py"),
+                        str(path), "--json"], capture_output=True, text=True)
+    import json
+    return json.loads(r.stdout)["issues"]
+
+
+def test_audit_flags_page_number_placement():
+    """Per-slide numbers warn; a numbered title slide or an unnumbered chapter fails."""
+    from pptx.util import Pt
+    with tempfile.TemporaryDirectory() as d:
+        prs = Presentation()
+        prs.slide_width, prs.slide_height = Inches(13.333), Inches(7.5)
+        blank = prs.slide_layouts[6]
+        texts = [("Talk title", 40), ("Chapter 1: Method", 40),
+                 ("A summary sentence with 12 in it.", 20), ("Thank you", 40)]
+        for text, size in texts:
+            s = prs.slides.add_slide(blank)
+            tb = s.shapes.add_textbox(Inches(0.6), Inches(1.15), Inches(12), Inches(1))
+            tb.text_frame.text = text
+            tb.text_frame.paragraphs[0].runs[0].font.size = Pt(size)
+        from page_number import place_page_number_field
+        place_page_number_field(prs.slides[0], 1, 13.333)  # wrong: title numbered
+        place_page_number_field(prs.slides[2], 3, 13.333)  # per-slide, not master
+        out = Path(d) / "bad.pptx"
+        prs.save(out)
+        pn = {(i["slide"], i["level"]) for i in _audit(out) if i["rule"] == "page number"}
+        assert (1, "FAIL") in pn, pn      # title slide numbered
+        assert (2, "FAIL") in pn, pn      # chapter separator unnumbered
+        assert (3, "WARN") in pn, pn      # per-slide object
+        assert not any(sl == 4 for sl, _ in pn), pn  # acknowledgement fine
+
+
+def test_retrofit_on_master():
+    from pptx.util import Pt
+    with tempfile.TemporaryDirectory() as d:
+        prs = Presentation()
+        prs.slide_width, prs.slide_height = Inches(13.333), Inches(7.5)
+        blank = prs.slide_layouts[6]
+        for text, size in [("Talk title", 40), ("Body with 12 in it.", 20),
+                           ("Chapter 2", 40), ("ご清聴ありがとうございました", 40)]:
+            s = prs.slides.add_slide(blank)
+            tb = s.shapes.add_textbox(Inches(1), Inches(3), Inches(11), Inches(1.5))
+            tb.text_frame.text = text
+            tb.text_frame.paragraphs[0].runs[0].font.size = Pt(size)
+        report = number_deck_on_master(prs)
+        assert report["exempt"] == [1, 4], report
+        assert report["numbered"] == [2, 3], report
+        out = Path(d) / "retro.pptx"
+        prs.save(out)
+        where = [find_page_number(s)[1] for s in Presentation(str(out)).slides]
+        assert where == [None, "master", "master", None], where
 
 
 if __name__ == "__main__":

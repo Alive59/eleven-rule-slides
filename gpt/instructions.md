@@ -83,7 +83,7 @@ Draft title: "Our method outperforms baselines." → "Comparison with baselines"
 
 | Zone | x, y, w, h (in) |
 |---|---|
-| Page number | 11.98, 0.18, 0.95, 0.55 — 28pt pure black, right-top, auto field |
+| Page number | 11.98, 0.18, 0.95, 0.55 — 28pt pure black, right-top, field on the slide master |
 | Title | 0.6, 0.28, 11.5, 0.75 — 32pt bold, one line |
 | Summary | 0.6, 1.15, 12.1, ≤1.5 — 20pt bullets, 2–4 |
 | Evidence | 0.6, 2.75, 12.1, 4.35 — figures, tables, charts |
@@ -95,8 +95,9 @@ is a figure too small to read (rule 3). Aim for 3"+ of height per figure when th
 are one or two.
 
 Title 32pt and up, body 20pt and up. Text inside a diagram or grouped shape is
-artwork — exempt from the size rules, and the audit skips it. Cover, chapter
-separator and closing slides carry no page number. Colors: black text, gray
+artwork — exempt from the size rules, and the audit skips it. The page number sits
+on the slide master; every slide shows it except the title and acknowledgement
+slides (the kit handles both). Colors: black text, gray
 captions, red enclosures only — red is reserved for linkage so it keeps its meaning.
 
 # API

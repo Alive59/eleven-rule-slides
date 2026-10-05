@@ -1,6 +1,6 @@
 ---
 name: eleven-rule-slides
-description: Build research presentation slides that follow the eleven rules of slide composition — title + 2-4 summary sentences + supporting evidence per slide, chapter separator slides, red enclosures linking claims to figures, large fonts (title 32pt and up, body 20pt and up), Calibri for English and Yu Gothic for Japanese, auto page number top-right. Use this skill whenever the user asks for slides, a deck, a presentation, a talk, a progress report, a seminar/lab meeting/conference/defense presentation, or a .pptx file, and also when they ask to review, restructure, or fix existing slides. Applies even if they don't mention the eleven rules by name.
+description: Build research presentation slides that follow the eleven rules of slide composition — title + 2-4 summary sentences + supporting evidence per slide, chapter separator slides, red enclosures linking claims to figures, large fonts (title 32pt and up, body 20pt and up), Calibri for English and Yu Gothic for Japanese, page number on the slide master (top-right, none on the title and acknowledgement slides). Use this skill whenever the user asks for slides, a deck, a presentation, a talk, a progress report, a seminar/lab meeting/conference/defense presentation, or a .pptx file, and also when they ask to review, restructure, or fix existing slides. Applies even if they don't mention the eleven rules by name.
 ---
 
 # Eleven-rule research slides
@@ -29,11 +29,10 @@ clean under the same `check_rules.py`.
 | Codex and other coding agents | either | `AGENTS.md` at the repo root is the entry point |
 | Plain Python pipeline | `scripts/slide_kit.py` | `pip install -r requirements.txt` |
 
-The Python kit cannot define a slide master (python-pptx has no API for one), so it
-writes a real `slidenum` field onto each numbered slide instead. PowerPoint still
-renumbers the field itself, so reordering slides is safe. Everything else — zone
-geometry, the two-font split, minimum sizes, which slides carry no number — is
-identical.
+Both kits put the page number on the slide master and give the title and
+acknowledgement slides a layout that hides it, so the two produce the same
+package: zone geometry, the two-font split, minimum sizes and which slides carry
+a number are identical.
 
 ## Content precedence
 
@@ -134,9 +133,14 @@ when there are one or two of them.
   its point size would just burst the box it sits in.
 - The page number is 28pt, pure black, fixed at the right-top corner. Never gray,
   never small: it is what the audience calls out when they want to return to a
-  slide in Q&A. Cover, chapter separator and closing slides carry no number —
-  nobody cites those pages. `addTitleSlide`, `addChapterSlide` and
-  `addClosingSlide` use a second master without the field, so this is automatic.
+  slide in Q&A. It lives **on the slide master**, once, as a `slidenum` field —
+  not as an object on each slide — so every slide prints its own number, and a
+  slide added later in PowerPoint is numbered without anyone remembering to.
+- Every slide is numbered **except the title slide and the acknowledgement
+  (closing) slide**. Chapter separators are numbered like any other slide.
+  `addTitleSlide` / `addClosingSlide` (`add_title_slide` / `add_closing_slide`) put
+  those two on a plain layout that hides master shapes (`showMasterSp="0"`), so
+  this is automatic.
 - Bold marks highlighted numerals: write `**0.86**` or `**81,348 patches**` in a
   summary sentence and the kit renders that span bold (rule 7).
 - No color coding beyond black text, gray captions, and red enclosures. Red is
@@ -212,7 +216,7 @@ worth of content.
 | `scripts/slide_kit.js` | `require()` it from the generator script; provides `createDeck`, `addContentSlide`, `addChapterSlide`, `addTitleSlide`, `addClosingSlide`, `fitImages`, `redBox`, `balloon`, `caption` |
 | `scripts/slide_kit.py` | same kit on `python-pptx`, snake_case: `create_deck`, `add_content_slide`, `add_chapter_slide`, `add_title_slide`, `add_closing_slide`, `fit_images`, `red_box`, `balloon`, `caption`, then `deck.save(path)` |
 | `scripts/check_rules.py deck.pptx [--font-en F --font-ja F]` | Audits fonts, sizes, bullet counts, page number, margins, evidence-zone use. FAIL must be fixed; WARN needs a reason |
-| `scripts/page_number.py` | `add_page_number(slide, n, slide_w)` — drops a 28pt black `slidenum` field at the right-top of an existing deck; returns False and skips cover, separator and closing slides. Use it when retrofitting a deck you did not generate |
+| `scripts/page_number.py` | `number_deck_on_master(prs)` — retrofits a deck you did not generate: puts the 28pt black `slidenum` field on each slide master and hides master shapes on the title and acknowledgement slides. Returns a report; tell the user about slides in `hidden_also` (other master graphics hidden there too) and `per_slide` (old per-slide numbers left in place) |
 
 Minimal generator:
 

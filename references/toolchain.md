@@ -20,12 +20,19 @@ your runtime has no general pptx skill of its own; where one exists (Claude ship
   equal length, or `writeFile` rejects.
 - `writeFile` returns a promise. Ending the script without awaiting it writes
   nothing.
+- `defineSlideMaster({ slideNumber })` does not put the number on the slide
+  master: it copies a number placeholder onto every slide. The kit therefore
+  leaves `slideNumber` unset and writes the master text box into the package at
+  export time (`createDeck` wraps `exportPresentation`, so `writeFile`, `write`
+  and `stream` all get it). Do not add `slideNumber` back.
 
 ## python-pptx (`scripts/slide_kit.py`)
 
-- There is no API for defining a slide master or layout. The kit writes a real
-  `slidenum` field onto each numbered slide instead; PowerPoint renumbers it on
-  open, so reordering slides is still safe.
+- There is no API for adding shapes to a slide master or for adding a layout.
+  `page_number.py` writes the master text box as raw XML and clones the blank
+  layout into a plain one (`showMasterSp="0"`) for the title and acknowledgement
+  slides. A slidenum *placeholder* on a master or layout prints nothing on the
+  slides — it must be an ordinary text box holding the field.
 - `run.font.name` writes only `<a:latin>`. Japanese glyphs resolve through
   `<a:ea>`, so a mixed run styled with `font.name` alone renders the kana in the
   Latin face. `slide_kit.py` writes `<a:latin>`, `<a:ea>` and `<a:cs>` per run;

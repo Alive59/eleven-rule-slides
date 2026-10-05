@@ -72,33 +72,79 @@ function toRuns(text, opts = {}) {
   return runs.length ? runs : [{ text: ' ', options: Object.assign({}, opts, { fontFace: EN_FONT }) }];
 }
 
-/** New deck with the master that carries the auto page number (top-right). */
+// The page number lives once on the slide master (ppt/slideMasters/slideMaster1.xml)
+// as an ordinary text box holding a slidenum field: every layout that shows master
+// shapes inherits it, so every slide — including one added later in PowerPoint —
+// prints its own number with no per-slide object. pptxgenjs can only emit
+// per-slide number placeholders, so the master box is written into the package at
+// export time. The ELEVEN_RULE_PLAIN layout hides master shapes (showMasterSp="0");
+// only the title and acknowledgement slides use it.
+const EMU = 914400;
+const MASTER_NUM_NAME = 'Page Number (master)';
+
+function masterNumberXml(id, font) {
+  const p = G.pageNum;
+  const sz = p.fontSize * 100;
+  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${MASTER_NUM_NAME}"/>` +
+    '<p:cNvSpPr txBox="1"/><p:nvPr userDrawn="1"/></p:nvSpPr>' +
+    `<p:spPr><a:xfrm><a:off x="${Math.round(p.x * EMU)}" y="${Math.round(p.y * EMU)}"/>` +
+    `<a:ext cx="${Math.round(p.w * EMU)}" cy="${Math.round(p.h * EMU)}"/></a:xfrm>` +
+    '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr>' +
+    '<p:txBody><a:bodyPr wrap="none" rtlCol="0" anchor="t"><a:noAutofit/></a:bodyPr>' +
+    '<a:lstStyle/><a:p><a:pPr algn="r"/>' +
+    '<a:fld id="{1D0E7A29-9A6B-4C5E-9F0A-00000000A11D}" type="slidenum">' +
+    `<a:rPr lang="en-US" sz="${sz}" b="0" dirty="0">` +
+    '<a:solidFill><a:srgbClr val="000000"/></a:solidFill>' +
+    `<a:latin typeface="${font}"/><a:ea typeface="${font}"/><a:cs typeface="${font}"/>` +
+    '</a:rPr><a:t>\u2039#\u203a</a:t></a:fld>' +
+    `<a:endParaRPr lang="en-US" sz="${sz}"/></a:p></p:txBody></p:sp>`;
+}
+
+/** Rewrite an exported .pptx so the master carries the page number. */
+async function moveNumberToMaster(data, font) {
+  const JSZip = require('jszip'); // a pptxgenjs dependency, always installed with it
+  const zip = await JSZip.loadAsync(data);
+  const masterPath = 'ppt/slideMasters/slideMaster1.xml';
+  let master = await zip.file(masterPath).async('string');
+  if (!master.includes(MASTER_NUM_NAME)) {
+    const ids = [...master.matchAll(/<p:cNvPr id="(\d+)"/g)].map((m) => +m[1]);
+    const id = Math.max(1, ...ids) + 1;
+    master = master.replace('</p:spTree>', masterNumberXml(id, font) + '</p:spTree>');
+    zip.file(masterPath, master);
+  }
+  for (const path of Object.keys(zip.files)) {
+    if (!/^ppt\/slideLayouts\/slideLayout\d+\.xml$/.test(path)) continue;
+    let xml = await zip.file(path).async('string');
+    if (!xml.includes('<p:cSld name="ELEVEN_RULE_PLAIN"')) continue;
+    if (!/<p:sldLayout\b[^>]*showMasterSp=/.test(xml)) {
+      xml = xml.replace(/<p:sldLayout\b/, '<p:sldLayout showMasterSp="0"');
+      zip.file(path, xml);
+    }
+  }
+  return zip;
+}
+
+/** New deck whose slide master carries the auto page number (top-right). */
 function createDeck(opts = {}) {
   setFonts(opts);
   const pres = new pptxgen();
   pres.layout = 'LAYOUT_WIDE';
-  pres.defineSlideMaster({
-    title: 'ELEVEN_RULE',
-    background: { color: 'FFFFFF' },
-    slideNumber: {
-      x: G.pageNum.x,
-      y: G.pageNum.y,
-      w: G.pageNum.w,
-      h: G.pageNum.h,
-      align: 'right',
-      fontFace: EN_FONT,
-      fontSize: G.pageNum.fontSize,
-      color: BLACK,
-    },
-  });
-  // Cover, chapter separator and closing slides get the same canvas without the
-  // number — the audience never needs to cite those pages.
-  pres.defineSlideMaster({
-    title: 'ELEVEN_RULE_PLAIN',
-    background: { color: 'FFFFFF' },
-  });
+  pres.defineSlideMaster({ title: 'ELEVEN_RULE', background: { color: 'FFFFFF' } });
+  // Title and acknowledgement slides: same canvas, master shapes hidden, so no number.
+  pres.defineSlideMaster({ title: 'ELEVEN_RULE_PLAIN', background: { color: 'FFFFFF' } });
   if (opts.author) pres.author = opts.author;
   if (opts.title) pres.title = opts.title;
+
+  // Every export path (writeFile, write, stream) goes through exportPresentation.
+  const font = EN_FONT;
+  const exportRaw = pres.exportPresentation;
+  pres.exportPresentation = async (props = {}) => {
+    const raw = await exportRaw({ compression: props.compression, outputType: 'nodebuffer' });
+    const zip = await moveNumberToMaster(raw, font);
+    const compression = props.compression ? 'DEFLATE' : 'STORE';
+    const type = props.outputType === 'STREAM' ? 'nodebuffer' : (props.outputType || 'blob');
+    return zip.generateAsync({ type, compression });
+  };
   return { pres, G };
 }
 
@@ -174,9 +220,9 @@ function addContentSlide(deck, { title, summary = [], notes } = {}) {
   return { slide, zone: Object.assign({}, G.evidence) };
 }
 
-/** Chapter separator (rule 5): title only, centered, no page number. */
+/** Chapter separator (rule 5): title only, centered, numbered like any slide. */
 function addChapterSlide(deck, title) {
-  const slide = newSlide(deck, false);
+  const slide = newSlide(deck);
   slide.addText(toRuns(title, { fontSize: 40, bold: true, color: BLACK }), {
     x: 1.0, y: 2.8, w: 11.3, h: 1.9,
     align: 'center', valign: 'middle', margin: 0, isTextBox: true,
@@ -203,7 +249,7 @@ function addTitleSlide(deck, { title, subtitle, lines = [] } = {}) {
   return slide;
 }
 
-/** Closing slide ("ご清聴ありがとうございました" etc.): no page number. */
+/** Acknowledgement / closing slide ("ご清聴ありがとうございました" etc.): no page number. */
 function addClosingSlide(deck, text) {
   const slide = newSlide(deck, false);
   slide.addText(toRuns(text, { fontSize: 40, bold: true, color: BLACK }), {

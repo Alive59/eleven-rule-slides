@@ -22,6 +22,7 @@ import sys
 
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
+from pptx.oxml.ns import qn
 
 EMU_IN = 914400.0
 # Overridden by --font-en / --font-ja; the deck's fonts are the user's choice, the
@@ -128,14 +129,48 @@ def page_number_style(slide, pn):
     return size, color
 
 
-def has_page_number(slide):
+THANKS_RE = re.compile(r"thank|acknowledg|ご清聴|ありがとう|謝辞|感谢|谢谢|致谢", re.I)
+
+
+def _is_placeholder(sh):
+    return sh._element.find(".//" + qn("p:ph")) is not None
+
+
+def _hides_master(part):
+    return part._element.get("showMasterSp") == "0"
+
+
+def find_page_number(slide):
+    """(shape, where) for the slide-number field that prints on this slide.
+
+    ``where`` is "slide", "layout" or "master". A placeholder on a layout or the
+    master prints nothing by itself; an ordinary text box there prints on every
+    slide that does not hide master shapes (showMasterSp="0").
+    """
     for sh in slide.shapes:
-        if "slidenum" in sh._element.xml:
-            return sh
-    return None
+        if 'type="slidenum"' in sh._element.xml:
+            return sh, "slide"
+    if _hides_master(slide):
+        return None, None
+    layout = slide.slide_layout
+    for sh in layout.shapes:
+        if not _is_placeholder(sh) and 'type="slidenum"' in sh._element.xml:
+            return sh, "layout"
+    if _hides_master(layout):
+        return None, None
+    for sh in layout.slide_master.shapes:
+        if not _is_placeholder(sh) and 'type="slidenum"' in sh._element.xml:
+            return sh, "master"
+    return None, None
 
 
-def check_slide(slide, slide_w, slide_h):
+def has_page_number(slide):
+    """The per-slide page-number shape, if any (inherited ones are not on the slide)."""
+    sh, where = find_page_number(slide)
+    return sh if where == "slide" else None
+
+
+def check_slide(slide, slide_w, slide_h, index=0, n_slides=1):
     issues = []
 
     def fail(rule, msg):
@@ -244,20 +279,31 @@ def check_slide(slide, slide_w, slide_h):
                                      f"{sorted(LATIN_FONTS)[0]}")
 
     # --- slide-level composition -------------------------------------------
-    # A cover, chapter separator (rule 5) or closing slide: large text, nothing
-    # else. These carry no page number and are exempt from the content trio.
+    # A cover-like slide is large text and nothing else: the title slide, a
+    # chapter separator (rule 5) or the acknowledgement slide. All three are
+    # exempt from the content trio. Only the title and acknowledgement slides
+    # are exempt from the page number; a chapter separator is numbered.
     is_cover = bool(big_text) and not summary_paras and not visuals
-    if is_cover:
+    all_text = " ".join(sh.text_frame.text for sh in shapes if sh.has_text_frame)
+    is_title = index == 0
+    last = index == n_slides - 1
+    is_thanks = index > 0 and (
+        (bool(THANKS_RE.search(all_text)) and (is_cover or last or not visuals))
+        or (is_cover and last))
+    pn, where = find_page_number(slide)
+    if is_title or is_thanks:
         if pn is not None:
-            fail("page number", "cover, chapter separator and closing slides carry no "
-                                "page number — remove it")
-        return issues
-
-    pn = has_page_number(slide)
-    if pn is None:
-        fail("page number", "no slide-number field on this slide (a placeholder on the "
-                            "layout alone does not print one)")
+            kind = "title" if is_title else "acknowledgement"
+            fail("page number", f"the {kind} slide carries no page number — hide the "
+                                "master shapes on it (a plain layout, showMasterSp=0)")
+    elif pn is None:
+        fail("page number", "no page number prints on this slide — put a slidenum "
+                            "text box on the slide master (a placeholder alone prints "
+                            "nothing) and keep master shapes shown on this layout")
     else:
+        if where == "slide":
+            warn("page number", "page number is a per-slide object; put it on the "
+                                "slide master so every slide inherits it")
         x, y = inches(pn.left), inches(pn.top)
         if x is not None and x < slide_w * 0.6:
             fail("page number", f"not at right (x={x:.2f} in)")
@@ -266,11 +312,13 @@ def check_slide(slide, slide_w, slide_h):
         size, rgb = page_number_style(slide, pn)
         if size is None:
             warn("page number", "page number has no explicit size; set it to "
-                                f"{PAGE_NUM_PT}pt on the slide or the master")
+                                f"{PAGE_NUM_PT}pt on the slide master")
         elif size < PAGE_NUM_PT:
             fail("page number", f"page number at {size:g}pt (min {PAGE_NUM_PT})")
         if rgb is not None and rgb.upper() != "000000":
             fail("page number", f"page number in #{rgb}; use pure black")
+    if is_cover or is_title or is_thanks:
+        return issues
 
 
     if title_sh is None:
@@ -348,7 +396,7 @@ def main():
 
     for i, slide in enumerate(prs.slides, start=1):
         counts, order = {}, []
-        for item in check_slide(slide, slide_w, slide_h):
+        for item in check_slide(slide, slide_w, slide_h, i - 1, len(prs.slides)):
             if item not in counts:
                 order.append(item)
             counts[item] = counts.get(item, 0) + 1
