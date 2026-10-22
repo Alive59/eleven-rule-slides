@@ -15,8 +15,10 @@ sys.path.insert(0, str(HERE / "scripts"))
 from pptx import Presentation  # noqa: E402
 from slide_kit import (add_closing_slide, add_content_slide, add_title_slide,  # noqa: E402
                        create_deck)
-from report_kit import (PALETTE, compare_bars, grouped_bars, label_under,  # noqa: E402
+from report_kit import (PALETTE, compare_bars, flat_violations,  # noqa: E402
+                        flatten_shapes, grouped_bars, label_under, plain_fill,
                         report_table, slide_legend)
+from slide_kit import balloon, red_box  # noqa: E402
 
 
 def build(path):
@@ -32,6 +34,11 @@ def build(path):
     grouped_bars(slide, 4.8, 2.9, 7.9, 3.4, ["≤16", "17-32", "ALL"],
                  {"前回": [100, 99.3, 77.7], "今回": [100, 99.3, 84.1]})
     slide_legend(slide, 6.8, 6.5, ["前回", "今回"])
+    balloon(slide, text="大型建築物", x=9.5, y=2.9, w=2.0, h=0.6, point_to={"x": 11.0, "y": 4.5})
+    from pptx.enum.shapes import MSO_SHAPE
+    from pptx.util import Inches
+    block = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(1), Inches(1), Inches(1), Inches(0.5))
+    block.shadow.inherit = True                    # a shape left with theme styling
     slide, _ = add_content_slide(deck, title="面数別の頂点誤差", summary=[
         "頂点誤差：対応頂点間距離 (m) の建築物平均",
         "水平誤差 **1.00 → 0.77 m**",
@@ -41,7 +48,10 @@ def build(path):
                  [("≤16", ["0.06", "0.70", "0.05", "0.71"]),
                   ("全体", ["1.00", "0.97", "0.77", "0.73"])],
                  bold={(0, 2), (1, 2), (1, 3)})
+    red_box(slide, x=0.6, y=4.3, w=12.0, h=0.5)
     add_closing_slide(deck, "ご清聴ありがとうございました")
+    assert flat_violations(deck.prs)  # the raw block fails
+    flatten_shapes(deck.prs)
     deck.save(path)
 
 
@@ -60,6 +70,7 @@ def test_report_kit():
             assert color in xml
         tables = [sh.table for s in prs.slides for sh in s.shapes if sh.has_table]
         assert len(tables) == 1 and tables[0].cell(0, 1).text == "前回"
+        assert flat_violations(prs) == [], flat_violations(prs)
         r = subprocess.run([sys.executable, str(ROOT / "scripts" / "check_rules.py"), path],
                            capture_output=True, text=True)
         assert "| 0 FAIL" in r.stdout, r.stdout

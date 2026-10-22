@@ -51,6 +51,22 @@ Report decks break down when the same model is "model-A ep18" on one page,
   precedence) and fill the Color column from it instead. If it is inconsistent across
   pages, report that and ask before recoloring.
 
+## Shapes: color fill only
+
+Every shape the skill adds — diagram blocks, legend swatches, balloons, panels — has
+a solid color fill and nothing else: no outline, shadow, glow, soft edge, bevel or 3D,
+gradient, pattern or reflection. Shapes whose purpose is the line itself (the red
+enclosure, a dashed grouping frame, arrows and connectors) have that plain line only,
+no fill and no effects.
+
+Shapes made by python-pptx or pptxgenjs are linked to the theme through `<p:style>`,
+and the default theme gives them a gradient fill and a shadow even when you set a
+color. Run `flatten_shapes(deck.prs)` (helpers below) once before saving: it removes
+the theme link and writes the colors out explicitly. `flat_violations(prs)` lists
+what is still styled; it must return nothing. Pictures, charts and tables are not
+touched. On an existing deck, report styled shapes rather than flattening them
+(content precedence), unless the user asks.
+
 ## Page type 1: Method
 
 Summary bullets state the concrete setting, in this order, one item per bullet
@@ -78,9 +94,9 @@ parenthesis; a longer definition goes in a caption or balloon (rule 9).
     box for how the output is used downstream.
   - Inputs and outputs as small thumbnails (about 1.1-1.5 in square) with a short
     noun label directly below.
-  - The model as one rounded rectangle with one light fill (e.g. `E2EFDA`, border
-    `375623`); inside it at most 3-4 sub-blocks named with their common names.
-  - Arrows plain dark gray. No shadows, gradients, 3D effects or icons.
+  - The model as one rounded rectangle with one light fill (e.g. `E2EFDA`), no
+    border; inside it at most 3-4 sub-blocks named with their common names.
+  - Arrows plain dark gray lines. No icons. Shapes follow *Shapes* below.
   - At most about 7 boxes in total. If more are needed, split into two slides.
   - Group the shapes so the audit treats the diagram as artwork.
 
@@ -217,10 +233,12 @@ not the way a chat or a paper abstract reads.
    with the helpers below on the returned slide.
 3. Audit with `check_rules.py` (charts and tables are evidence and are not
    font-checked there).
-4. Report-rule check by hand, per page: term-sheet names and colors used everywhere;
+4. `flatten_shapes(deck.prs)` before `deck.save()`, then `flat_violations()` on the
+   saved file must return an empty list.
+5. Report-rule check by hand, per page: term-sheet names and colors used everywhere;
    no text inside charts; metric definition bullet on every evaluation page; same
    bullet fields on every visualization page; language table.
-5. Render and look at every page, as in the base skill.
+6. Render and look at every page, as in the base skill.
 
 When reviewing an existing report deck, the base skill's content precedence holds:
 report violations of these rules per page with a concrete rewrite, and apply only the
@@ -242,6 +260,7 @@ from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
 from pptx.oxml.ns import qn
+import copy
 from lxml import etree
 
 # Red-black style. Colors come from the term sheet, bound to display names.
@@ -314,7 +333,7 @@ def slide_legend(slide, x, y, names, font_en="Calibri", font_ja="Yu Gothic", siz
     cx = x
     for name in names:
         sw = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(cx), Inches(y + 0.1), Inches(0.6), Inches(0.22))
-        sw.fill.solid(); sw.fill.fore_color.rgb = RGBColor.from_string(PALETTE[name]); sw.line.fill.background(); sw.shadow.inherit = False
+        plain_fill(sw, PALETTE[name])
         tb = slide.shapes.add_textbox(Inches(cx + 0.7), Inches(y - 0.05), Inches(1.6), Inches(0.5))
         r = tb.text_frame.paragraphs[0].add_run(); r.text = name
         r.font.size = Pt(size); r.font.name = font_en; _ea(r.font, font_ja)
@@ -382,6 +401,138 @@ def report_table(slide, x, y, w, h, row_label, groups, metrics, rows, bold=(),
                 spec["B"] = (0.75, "D9D9D9")
             _set_borders(tbl.cell(r, c), spec)
     return tbl
+
+# --- Flat shapes: color fill only -------------------------------------------------
+# Autoshapes carry a <p:style> that links them to the theme: fillRef idx=3 is a
+# gradient and effectRef idx=2 a shadow in the default theme. An empty effectLst is
+# not enough (some renderers still draw the theme effect), so the link is removed and
+# its colors are written out explicitly.
+
+_A = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
+_P = "{http://schemas.openxmlformats.org/presentationml/2006/main}"
+_FILLS = {_A + t for t in ("noFill", "solidFill", "gradFill", "blipFill", "pattFill", "grpFill")}
+_COLORS = {_A + t for t in ("schemeClr", "srgbClr", "prstClr", "sysClr", "scrgbClr", "hslClr")}
+
+
+def _color_of(ref):
+    """Copy of the color element inside a style ref (fillRef/lnRef/fontRef), or None."""
+    if ref is None:
+        return None
+    for c in ref:
+        if c.tag in _COLORS:
+            return copy.deepcopy(c)
+    return None
+
+
+def _solid(color_el):
+    f = etree.Element(_A + "solidFill")
+    f.append(color_el)
+    return f
+
+
+def _flatten(el):
+    """el is a p:sp or p:cxnSp. Leaves: solid fill (filled shapes, no outline) or a
+    plain line (unfilled shapes and connectors). No style link, effects, 3D, gradient."""
+    spPr = el.find(_P + "spPr")
+    style = el.find(_P + "style")
+    is_cxn = etree.QName(el).localname == "cxnSp"
+    fill_ref = _color_of(style.find(_A + "fillRef")) if style is not None else None
+    ln_ref = _color_of(style.find(_A + "lnRef")) if style is not None else None
+    font_ref = _color_of(style.find(_A + "fontRef")) if style is not None else None
+
+    for tag in ("effectLst", "effectDag", "scene3d", "sp3d"):
+        for x in spPr.findall(_A + tag):
+            spPr.remove(x)
+    fills = [c for c in spPr if c.tag in _FILLS]
+    fill = fills[0] if fills else None
+    if fill is not None and fill.tag in (_A + "gradFill", _A + "pattFill"):
+        stop = fill.find(".//" + _A + "gs")       # first gradient stop -> solid
+        col = next((copy.deepcopy(c) for c in (stop if stop is not None else fill)
+                    if c.tag in _COLORS), None)
+        new = _solid(col) if col is not None else etree.Element(_A + "noFill")
+        fill.addprevious(new); spPr.remove(fill); fill = new
+    if fill is None:
+        if is_cxn or style is None or fill_ref is None:
+            fill = etree.Element(_A + "noFill")
+        else:
+            fill = _solid(fill_ref)
+        geom = [c for c in spPr if c.tag in (_A + "xfrm", _A + "prstGeom", _A + "custGeom")]
+        (geom[-1].addnext(fill) if geom else spPr.insert(0, fill))
+    filled = fill.tag != _A + "noFill"
+
+    ln = spPr.find(_A + "ln")
+    if ln is None:
+        ln = etree.Element(_A + "ln")
+    for x in ln.findall(_A + "effectLst") + ln.findall(_A + "effectDag"):
+        ln.remove(x)
+    if filled and not is_cxn:                     # filled shape: no outline at all
+        for child in list(ln):
+            ln.remove(child)
+        etree.SubElement(ln, _A + "noFill")
+    elif not any(c.tag in _FILLS for c in ln):    # line shape relying on the theme color
+        ln.insert(0, _solid(ln_ref if ln_ref is not None else etree.Element(_A + "srgbClr", val="000000")))
+    fill.addnext(ln)
+    ln.addnext(etree.Element(_A + "effectLst"))
+
+    if style is not None:
+        if font_ref is not None:                  # keep the text color the style gave
+            for rpr in el.iter(_A + "rPr", _A + "endParaRPr"):
+                if not any(c.tag in _FILLS for c in rpr):
+                    rpr.insert(0, _solid(copy.deepcopy(font_ref)))
+            for r in el.iter(_A + "r"):
+                if r.find(_A + "rPr") is None:
+                    rpr = etree.Element(_A + "rPr"); r.insert(0, rpr)
+                    rpr.append(_solid(copy.deepcopy(font_ref)))
+        el.remove(style)
+
+
+def plain_fill(shape, color):
+    """Solid color fill and nothing else: no outline, shadow, glow, bevel or gradient."""
+    shape.fill.solid(); shape.fill.fore_color.rgb = RGBColor.from_string(color)
+    _flatten(shape._element)
+    return shape
+
+
+def _shape_elements(prs):
+    for i, slide in enumerate(prs.slides, 1):
+        for el in slide.shapes._spTree.iter(_P + "sp", _P + "cxnSp"):
+            if el.find(".//" + _P + "cNvSpPr[@txBox='1']") is not None:
+                continue                          # text boxes carry no shape styling
+            if el.find(_P + "spPr") is None:
+                continue
+            yield i, el
+
+
+def flatten_shapes(prs):
+    """Pass over a whole deck before saving: every autoshape and connector ends with a
+    color fill only (filled shapes) or a plain line only (red enclosures, dashed frames,
+    arrows). Pictures, charts, tables and text boxes are left alone. Returns the count."""
+    n = 0
+    for _, el in _shape_elements(prs):
+        _flatten(el); n += 1
+    return n
+
+
+def flat_violations(prs):
+    """[(slide_no, shape_name, reason)] for shapes styled beyond a color fill."""
+    out = []
+    for i, el in _shape_elements(prs):
+        name = el.find(".//" + _P + "cNvPr").get("name")
+        spPr = el.find(_P + "spPr")
+        if el.find(_P + "style") is not None:
+            out.append((i, name, "linked to theme styles (shadow/gradient may apply)"))
+        for tag in ("scene3d", "sp3d", "gradFill", "pattFill"):
+            if spPr.find(_A + tag) is not None:
+                out.append((i, name, f"has {tag}"))
+        eff = spPr.find(_A + "effectLst")
+        if (eff is not None and len(eff)) or spPr.find(_A + "effectDag") is not None:
+            out.append((i, name, "has shadow/glow/soft edge"))
+        fills = [c for c in spPr if c.tag in _FILLS]
+        ln = spPr.find(_A + "ln")
+        if fills and fills[0].tag == _A + "solidFill" and etree.QName(el).localname == "sp" \
+                and ln is not None and ln.find(_A + "noFill") is None:
+            out.append((i, name, "filled shape has an outline"))
+    return out
 ```
 
 Usage on a slide from the base kit:
@@ -397,9 +548,14 @@ label_under(slide, 0.6, 3.8, "水密性 (%)")
 grouped_bars(slide, 4.8, 2.9, 7.9, 3.4, ["≤16", "17-32", "ALL"],
              {"前回": [100, 99.3, 77.7], "今回": [100, 99.3, 84.1]})
 slide_legend(slide, 6.8, 6.5, ["前回", "今回"])
+flatten_shapes(deck.prs)          # last step before saving: color fill only
+deck.save("report.pptx")
 ```
 
 The JS kit users can do the same with `pptxgenjs` `slide.addChart` / `slide.addTable`:
 `showTitle: false`, `showLegend: false`, `showValue: true`, `dataLabelFontBold: true`,
 `chartColors` from the term sheet in category order, `valGridLine: { color: "E6E6E6" }`
 (or `valAxisHidden: true` for grouped bins), and table borders as specified above.
+Give every shape `shadow: { type: "none" }` and either `line: { type: "none" }` (filled)
+or `fill: { type: "none" }` (line shapes), then run `flatten_shapes()` from Python on
+the saved file, since pptxgenjs also writes the theme link.
