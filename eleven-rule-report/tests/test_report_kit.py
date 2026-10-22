@@ -48,7 +48,7 @@ def build(path):
                  [("≤16", ["0.06", "0.70", "0.05", "0.71"]),
                   ("全体", ["1.00", "0.97", "0.77", "0.73"])],
                  bold={(0, 2), (1, 2), (1, 3)})
-    red_box(slide, x=0.6, y=4.3, w=12.0, h=0.5)
+    red_box(slide, x=0.6, y=4.3, w=12.0, h=0.5)   # as if the user asked for it
     add_closing_slide(deck, "ご清聴ありがとうございました")
     assert flat_violations(deck.prs)  # the raw block fails
     flatten_shapes(deck.prs)

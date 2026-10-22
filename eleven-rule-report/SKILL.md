@@ -44,12 +44,21 @@ Report decks break down when the same model is "model-A ep18" on one page,
 - The same metric keeps the same name and unit on every page (e.g. always
   「水平誤差 (m)」, never 「水平誤差」 on one page and 「XY error」 on another).
 - Colors are bound to the display name for the whole deck, so 前回 is red and 今回
-  is black on every chart (the red-black style). Because red is a series color here,
-  do not draw red enclosures on a chart; point at a bar with a balloon instead. Red
-  enclosures stay in use for text, tables, images and diagrams (rule 8).
+  is black on every chart (the red-black style).
 - When a deck already uses a different palette consistently, keep it (content
   precedence) and fill the Color column from it instead. If it is inconsistent across
   pages, report that and ask before recoloring.
+
+## Red frames: only when the user asks
+
+This overrides base rule 8 for report decks. Do not add red enclosures (`red_box`) on
+your own. The link between a sentence and its evidence is carried by the term-sheet
+names, the order of the bullets, and bold values in tables. Add a red frame only when
+the user asks for one and says where ("the >256 row", "the changed module"), and
+only there. When reviewing a report deck, a missing red frame is not a violation.
+
+If the user asks for a frame on a chart, say that red is also the 前回 series color
+there and offer a balloon instead; draw the frame if they still want it.
 
 ## Shapes: color fill only
 
@@ -87,8 +96,8 @@ parenthesis; a longer definition goes in a caption or balloon (rule 9).
 **Architecture figure**
 
 - **A given diagram is fixed.** Do not redraw, restyle, recolor, relabel or rearrange
-  it. Allowed: uniform scaling to fit the evidence zone, and a red enclosure or
-  balloon (rule 8) around the changed module.
+  it. Allowed: uniform scaling to fit the evidence zone, and a red frame around the
+  changed module when the user asks for one (see *Red frames*).
 - **No diagram given:** draw the simplest flow that shows the setting.
   - One row, left to right: inputs → model → output. Optional second row in a dashed
     box for how the output is used downstream.
@@ -159,8 +168,8 @@ Keep the style of a clean comparison table (`report_table()` below):
   1pt `595959` line under the header and under the last row; 0.75pt `D9D9D9` lines
   between body rows. No other borders.
 - The total row (全体 / ALL) is last.
-- Bold the better value of each pair — this replaces red enclosures inside tables;
-  use a red enclosure only for the one row the summary points at.
+- Bold the better value of each pair. A red frame around a row only when the user
+  asks for it (see *Red frames*).
 
 ## Page type 3: Visualization
 
