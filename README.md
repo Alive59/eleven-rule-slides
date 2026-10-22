@@ -163,3 +163,12 @@ tests/test_python_kit.py    smoke tests for the Python kit
 ```
 
 Run the tests with `pytest tests/` or `python tests/test_python_kit.py`.
+
+## Variant: eleven-rule-report
+
+`eleven-rule-report/` is a variant for regular project report meetings. It keeps
+every rule above and adds rules for method, evaluation and visualization pages: a
+term sheet that fixes one name and one color per model, native charts in a red-black
+style with no text inside, a standard comparison table, and plain formal wording.
+Helpers are in `eleven-rule-report/scripts/report_kit.py`; run
+`python eleven-rule-report/tests/test_report_kit.py` to check them.
