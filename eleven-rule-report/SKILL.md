@@ -20,9 +20,13 @@ deck is made of, and where the two disagree, this skill wins.
    `slide_kit.py`, run
    `git clone --depth 1 https://github.com/Alive59/eleven-rule-slides` and use the
    clone, as the base skill describes.
-2. **Ask the font pair** as the base skill does (default Calibri / Yu Gothic), unless
+2. **Use the Python kit** (`slide_kit.py` + the helpers below) for report decks,
+   even where Node is available. pptxgenjs charts with one color per bar write the
+   point colors after the data labels, which PowerPoint repairs on open, and round
+   value labels to whole numbers.
+3. **Ask the font pair** as the base skill does (default Calibri / Yu Gothic), unless
    the deck being edited already has one.
-3. **Write the term sheet** (next section) before any slide. Show it to the user when
+4. **Write the term sheet** (next section) before any slide. Show it to the user when
    a name or a "last time" baseline is not obvious from the material.
 
 ## Term sheet: one name, one color per thing
@@ -242,8 +246,10 @@ not the way a chat or a paper abstract reads.
    with the helpers below on the returned slide.
 3. Audit with `check_rules.py` (charts and tables are evidence and are not
    font-checked there).
-4. `flatten_shapes(deck.prs)` before `deck.save()`, then `flat_violations()` on the
-   saved file must return an empty list.
+4. `flatten_shapes(deck.prs)` before `deck.save()`. On the saved file,
+   `flat_violations()` and `chart_violations()` must both return an empty list —
+   the second catches chart XML that PowerPoint repairs on open, which
+   `check_rules.py` does not read.
 5. Report-rule check by hand, per page: term-sheet names and colors used everywhere;
    no text inside charts; metric definition bullet on every evaluation page; same
    bullet fields on every visualization page; language table.
@@ -280,7 +286,7 @@ AXIS_PT, LABEL_PT = 14, 16
 def _ea(font, face):
     font._rPr.append(etree.Element(qn("a:ea"), typeface=face))
 
-def _style_common(chart, show_value_axis=True, font_en="Calibri", font_ja="Yu Gothic"):
+def _style_common(chart, number_format, show_value_axis=True, font_en="Calibri", font_ja="Yu Gothic"):
     chart.has_title = False
     chart.has_legend = False
     chart.font.size = Pt(AXIS_PT); chart.font.name = font_en; _ea(chart.font, font_ja)
@@ -302,9 +308,25 @@ def _style_common(chart, show_value_axis=True, font_en="Calibri", font_ja="Yu Go
     plot.has_data_labels = True
     dl = plot.data_labels
     dl.font.size = Pt(LABEL_PT); dl.font.bold = True; dl.font.color.rgb = RGBColor(0, 0, 0)
-    dl.number_format_is_linked = True
+    # Write the format out. number_format_is_linked=True alone makes python-pptx emit
+    # <c:numFmt sourceLinked="1"/> without the required formatCode -> PowerPoint repair.
+    dl.number_format = number_format; dl.number_format_is_linked = False
     dl.position = XL_LABEL_POSITION.OUTSIDE_END
+    _positive_axis_ids(chart)
     return plot
+
+
+def _positive_axis_ids(chart):
+    """python-pptx's chart template uses negative axis IDs; the schema says unsignedInt.
+    Remap them to positive values everywhere they are referenced."""
+    C = "{http://schemas.openxmlformats.org/drawingml/2006/chart}"
+    root = chart._chartSpace
+    ids = {}
+    for el in root.iter(C + "axId", C + "crossAx"):
+        v = el.get("val")
+        if v is not None and v.startswith("-"):
+            ids.setdefault(v, str(500000000 + len(ids) + 1))
+            el.set("val", ids[v])
 
 def compare_bars(slide, x, y, w, h, labels, values, number_format="0.0", y_min=None):
     """One metric, one column per term (前回/今回/参照...), left to right. Colors by label."""
@@ -313,7 +335,7 @@ def compare_bars(slide, x, y, w, h, labels, values, number_format="0.0", y_min=N
     cd.add_series("v", values)
     chart = slide.shapes.add_chart(XL_CHART_TYPE.COLUMN_CLUSTERED, Inches(x), Inches(y),
                                    Inches(w), Inches(h), cd).chart
-    plot = _style_common(chart); plot.gap_width = 50
+    plot = _style_common(chart, number_format); plot.gap_width = 50
     if y_min is not None:
         chart.value_axis.minimum_scale = y_min
     for i, lab in enumerate(labels):
@@ -330,7 +352,7 @@ def grouped_bars(slide, x, y, w, h, categories, series, number_format="0.0"):
         cd.add_series(name, vals)
     chart = slide.shapes.add_chart(XL_CHART_TYPE.COLUMN_CLUSTERED, Inches(x), Inches(y),
                                    Inches(w), Inches(h), cd).chart
-    plot = _style_common(chart, show_value_axis=False); plot.gap_width = 60; plot.overlap = 0
+    plot = _style_common(chart, number_format, show_value_axis=False); plot.gap_width = 60; plot.overlap = 0
     plot.data_labels.font.size = Pt(AXIS_PT); plot.data_labels.font.bold = False
     for s, name in zip(plot.series, series):
         s.format.fill.solid(); s.format.fill.fore_color.rgb = RGBColor.from_string(PALETTE[name])
@@ -542,6 +564,38 @@ def flat_violations(prs):
                 and ln is not None and ln.find(_A + "noFill") is None:
             out.append((i, name, "filled shape has an outline"))
     return out
+
+
+# --- Chart check ---------------------------------------------------------------------
+# Defects PowerPoint repairs on open that a slide-level check misses, because charts
+# live in their own parts.
+
+_SER_ORDER = ["idx", "order", "tx", "spPr", "invertIfNegative", "pictureOptions", "dPt",
+              "dLbls", "trendline", "errBars", "cat", "val", "shape", "extLst"]
+
+
+def chart_violations(prs):
+    """[(slide_no, chart_part, reason)] for chart XML PowerPoint will repair."""
+    C = "{http://schemas.openxmlformats.org/drawingml/2006/chart}"
+    out = []
+    for i, slide in enumerate(prs.slides, 1):
+        for sh in slide.shapes:
+            if not getattr(sh, "has_chart", False):
+                continue
+            root = sh.chart._chartSpace
+            part = sh.chart.part.partname
+            for nf in root.iter(C + "numFmt"):
+                if nf.get("formatCode") is None:
+                    out.append((i, part, "numFmt without formatCode"))
+            for el in root.iter(C + "axId", C + "crossAx"):
+                if el.get("val", "0").startswith("-"):
+                    out.append((i, part, f"negative axis id {el.get('val')}"))
+            for ser in root.iter(C + "ser"):
+                pos = [_SER_ORDER.index(etree.QName(c).localname) for c in ser
+                       if etree.QName(c).localname in _SER_ORDER]
+                if pos != sorted(pos):
+                    out.append((i, part, "series children out of order (e.g. dPt after dLbls)"))
+    return out
 ```
 
 Usage on a slide from the base kit:
@@ -559,12 +613,11 @@ grouped_bars(slide, 4.8, 2.9, 7.9, 3.4, ["≤16", "17-32", "ALL"],
 slide_legend(slide, 6.8, 6.5, ["前回", "今回"])
 flatten_shapes(deck.prs)          # last step before saving: color fill only
 deck.save("report.pptx")
+from pptx import Presentation
+assert not flat_violations(Presentation("report.pptx"))
+assert not chart_violations(Presentation("report.pptx"))
 ```
 
-The JS kit users can do the same with `pptxgenjs` `slide.addChart` / `slide.addTable`:
-`showTitle: false`, `showLegend: false`, `showValue: true`, `dataLabelFontBold: true`,
-`chartColors` from the term sheet in category order, `valGridLine: { color: "E6E6E6" }`
-(or `valAxisHidden: true` for grouped bins), and table borders as specified above.
-Give every shape `shadow: { type: "none" }` and either `line: { type: "none" }` (filled)
-or `fill: { type: "none" }` (line shapes), then run `flatten_shapes()` from Python on
-the saved file, since pptxgenjs also writes the theme link.
+Do not build report charts or tables with pptxgenjs (see *Before you start*). If a
+deck already has pptxgenjs charts, `chart_violations()` names the ones PowerPoint will
+repair; rebuild them with `compare_bars` / `grouped_bars`.

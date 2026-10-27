@@ -15,7 +15,7 @@ sys.path.insert(0, str(HERE / "scripts"))
 from pptx import Presentation  # noqa: E402
 from slide_kit import (add_closing_slide, add_content_slide, add_title_slide,  # noqa: E402
                        create_deck)
-from report_kit import (PALETTE, compare_bars, flat_violations,  # noqa: E402
+from report_kit import (PALETTE, chart_violations, compare_bars, flat_violations,  # noqa: E402
                         flatten_shapes, grouped_bars, label_under, plain_fill,
                         report_table, slide_legend)
 from slide_kit import balloon, red_box  # noqa: E402
@@ -71,6 +71,9 @@ def test_report_kit():
         tables = [sh.table for s in prs.slides for sh in s.shapes if sh.has_table]
         assert len(tables) == 1 and tables[0].cell(0, 1).text == "前回"
         assert flat_violations(prs) == [], flat_violations(prs)
+        assert chart_violations(prs) == [], chart_violations(prs)
+        for ch in charts:                              # value labels keep the decimals
+            assert 'formatCode="0.0"' in ch.part.blob.decode("utf8")
         r = subprocess.run([sys.executable, str(ROOT / "scripts" / "check_rules.py"), path],
                            capture_output=True, text=True)
         assert "| 0 FAIL" in r.stdout, r.stdout
