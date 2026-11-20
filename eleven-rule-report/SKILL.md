@@ -28,6 +28,10 @@ deck is made of, and where the two disagree, this skill wins.
    the deck being edited already has one.
 4. **Write the term sheet** (next section) before any slide. Show it to the user when
    a name or a "last time" baseline is not obvious from the material.
+5. **Template.** Report decks often come with a client, funder or project template.
+   When one is given, follow the base skill's *Custom template* section: the
+   template is the background, the eleven-rule layout and the rules here go on top.
+   Ask for it when earlier report decks for the same meeting used one.
 
 ## Term sheet: one name, one color per thing
 
@@ -64,6 +68,10 @@ only there. When reviewing a report deck, a missing red frame is not a violation
 If the user asks for a frame on a chart, say that red is also the 前回 series color
 there and offer a balloon instead; draw the frame if they still want it.
 
+A red circle or red dashed outline inside a vector sketch (a missing roof face, an
+edge step) is part of the drawing, not a red frame: draw it when the sketch shows a
+defect the bullet names.
+
 ## Shapes: color fill only
 
 Every shape the skill adds — diagram blocks, legend swatches, balloons, panels — has
@@ -79,6 +87,10 @@ the theme link and writes the colors out explicitly. `flat_violations(prs)` list
 what is still styled; it must return nothing. Pictures, charts and tables are not
 touched. On an existing deck, report styled shapes rather than flattening them
 (content precedence), unless the user asks.
+
+Vector sketches (base skill *Visuals*) follow the same idea inside the SVG: flat
+face fills, no gradients or shadows. The white strokes between faces and the red
+defect markers are part of the drawing and are allowed.
 
 ## Page type 1: Method
 
@@ -112,6 +124,14 @@ parenthesis; a longer definition goes in a caption or balloon (rule 9).
   - Arrows plain dark gray lines. No icons. Shapes follow *Shapes* below.
   - At most about 7 boxes in total. If more are needed, split into two slides.
   - Group the shapes so the audit treats the diagram as artwork.
+  - Draw it as vectors from code (base skill *Visuals*): an SVG from a sketch
+    function, or grouped native shapes when the user will edit it. When an input or
+    output has no real image (a building, a DSM cross-section, a footprint), use a
+    vector sketch in the thumbnail slot instead of a placeholder picture.
+
+**Concept and comparison figures** (従来手法 vs 生成AI, before/after, error
+breakdown) follow the same rule: build them from the base skill's sketch functions
+so the same building or profile appears in both halves with only its state changed.
 
 ## Page type 2: Evaluation
 
@@ -252,7 +272,8 @@ not the way a chat or a paper abstract reads.
    `check_rules.py` does not read.
 5. Report-rule check by hand, per page: term-sheet names and colors used everywhere;
    no text inside charts; metric definition bullet on every evaluation page; same
-   bullet fields on every visualization page; language table.
+   bullet fields on every visualization page; language table; template background
+   kept on every page; diagrams and sketches are vectors, not pasted rasters.
 6. Render and look at every page, as in the base skill.
 
 When reviewing an existing report deck, the base skill's content precedence holds:
