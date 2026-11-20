@@ -475,3 +475,33 @@ def caption(slide, text, x, y, w, h=0.35, align="left"):
     tf = _textbox(slide, x, y, w, h, align=alignment).text_frame
     to_runs(tf.paragraphs[0], text, G["caption"]["font_size"])
     return tf
+
+
+def use_template(deck, content_layout, title_layout=None):
+    """Use a custom template as the background (SKILL.md, *Custom template*).
+
+    Call right after ``create_deck(template=...)``. Drops the template's sample
+    slides, puts the content slides on ``content_layout`` (the layout carrying the
+    template's band or logo) with the master page number shown, and, if given, uses
+    the template's own ``title_layout`` for the title and acknowledgement slides with
+    ``showMasterSp="0"`` set on it -- the layout's own art and images stay, the page
+    number does not print. Layouts are looked up by name.
+    """
+    prs = deck.prs
+    for sid in list(prs.slides._sldIdLst):
+        prs.part.drop_rel(sid.rId)
+        prs.slides._sldIdLst.remove(sid)
+    lay = prs.slide_layouts.get_by_name(content_layout)
+    if lay is None:
+        raise ValueError(f"template has no layout named {content_layout!r}: "
+                         f"{[l.name for l in prs.slide_layouts]}")
+    lay._element.attrib.pop("showMasterSp", None)
+    install_master_page_number(lay.slide_master, G["W"], font=deck.font_en)
+    deck.layout = lay
+    if title_layout:
+        tl = prs.slide_layouts.get_by_name(title_layout)
+        if tl is None:
+            raise ValueError(f"template has no layout named {title_layout!r}")
+        tl._element.set("showMasterSp", "0")
+        deck.plain_layout = tl
+    return deck

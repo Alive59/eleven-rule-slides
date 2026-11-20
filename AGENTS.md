@@ -58,8 +58,10 @@ scripts/slide_kit.py        generator (python-pptx)
 scripts/slide_kit.js        generator (pptxgenjs)
 scripts/check_rules.py      audit any .pptx against the mechanical rules
 scripts/page_number.py      master page number; retrofit onto a deck you did not build
+scripts/svg_kit.py          vector visuals: SVG from code as a vector picture, building sketches
 examples/example_deck.py    runnable example (Python)
 examples/example_deck.js    runnable example (Node)
 tests/test_python_kit.py    smoke tests: audit passes, geometry, font runs
+tests/test_template_svg.py  smoke tests: custom template background, SVG vector visuals
 gpt/instructions.md         condensed build for a ChatGPT Custom GPT
 ```

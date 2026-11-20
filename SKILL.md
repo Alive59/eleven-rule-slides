@@ -16,6 +16,17 @@ loop and the library footguns. This skill layers structure and typography on top
 it; it does not replace it. Where no such file exists, `references/toolchain.md` has
 the footguns for both generators in short form.
 
+## Script freshness
+
+The canonical scripts live at https://github.com/Alive59/eleven-rule-slides. Before
+generating or auditing, check that this skill's `scripts/` folder has
+`slide_kit.py` and that `scripts/page_number.py` defines
+`install_master_page_number`. If either is missing, the bundled scripts are older
+than this file: run `git clone --depth 1 https://github.com/Alive59/eleven-rule-slides`
+into the working directory and use that clone's `scripts/` and `references/`
+instead. If the clone fails (no network), use the bundled scripts and tell the user
+that the page number and title checks will follow the older rules.
+
 ## Runtimes
 
 The skill runs anywhere that has one of the two generators. Pick by what the
@@ -70,10 +81,13 @@ already written, then evidence, then anything new.
    `--font-en` / `--font-ja` so the check matches what was asked for. The rule the
    skill enforces is that a deck is consistent about its two faces, not that the
    faces are any particular pair — a lab or venue template may specify others.
+   **Template:** if the user gave a template (.potx, or a deck whose look they
+   want), it becomes the background; follow *Custom template* below. If a template
+   names its own fonts, offer that pair as the default in the font question.
 1. **Collect the content before touching code.** For each planned slide write, in
-   plain text: the title (a compact keyword phrase, not a sentence), the 2-4 summary sentences, and which figure or
-   table is the evidence. If a summary sentence has no evidence, or a figure has no
-   sentence, the slide is not ready.
+   plain text: the title (a compact keyword phrase, not a sentence), the 2-4
+   summary sentences, and which figure or table is the evidence. If a summary
+   sentence has no evidence, or a figure has no sentence, the slide is not ready.
 2. **Draft the outline with chapter separators** (rule 5), then confirm with the user
    if the deck is longer than ~8 slides or the talk length is unknown.
 3. **Generate with `scripts/slide_kit.js` or `scripts/slide_kit.py`.** Both fix the
@@ -93,6 +107,61 @@ Dependencies: `python-pptx` always (the audit needs it, and the Python kit is bu
 on it); `pptxgenjs` (npm) only for the JS kit; `Pillow` for aspect-correct image
 placement from the Python kit; LibreOffice + `pdftoppm` for the render. `pip install
 -r requirements.txt` covers the Python side.
+
+## Custom template
+
+When the user provides a template, its look wins: master and layout backgrounds,
+bands, logos and decorative art stay exactly as designed. The eleven-rule layer goes
+on top unchanged: the four zones, title and body sizes, the font pair, the page
+number (28pt black, right-top, on the master), title and summary rules, red only
+for linkage. Do not restyle, recolor or delete anything in the template.
+
+1. **Python kit only.** `create_deck(template=path)`; pptxgenjs cannot open a
+   template.
+2. **Check the slide size first.** The kit sets 13.333 x 7.5 in, but template art
+   does not rescale with the page. If the template is another size (4:3, A4), tell
+   the user and ask: convert the template to 16:9, or scale the zones to its size.
+3. **Drop the template's sample slides** when it is a template (.potx, or slides
+   that only hold placeholder text). When it is a real deck, ask whether to append to
+   it or only borrow its masters (content precedence).
+4. **Pick the layout that carries the design.** The kit defaults to the layout named
+   "Blank", which in many templates has no band or logo. Render one slide per layout
+   (or read the layout names) and choose the content layout, usually "Title Only".
+   For the title and acknowledgement slides use the template's own title layout,
+   with `showMasterSp="0"` set on it so the master's page number does not print.
+   Set the attribute on the layout itself; do not use `plain_layout()` to copy a
+   template layout — it copies the XML but not the image relationships, so pictures
+   in the layout break.
+5. **Check collisions in the render.** If template art overlaps the title zone,
+   the page-number corner, or the evidence zone, keep the zones and report it; offer
+   the smallest shift (e.g. title moved below a header band) and apply it only if
+   the user agrees. If the template already has a slide-number field, the kit reuses
+   it as is — restyle it to 28pt black right-top, and tell the user.
+6. **Colors.** Text stays black on light backgrounds. On a dark template
+   background, ask which text color to use before generating.
+
+```python
+from page_number import install_master_page_number
+
+def use_template(deck, content_layout, title_layout=None):
+    prs = deck.prs
+    for sid in list(prs.slides._sldIdLst):          # drop the template's sample slides
+        prs.part.drop_rel(sid.rId); prs.slides._sldIdLst.remove(sid)
+    lay = prs.slide_layouts.get_by_name(content_layout)
+    lay._element.attrib.pop("showMasterSp", None)  # master number must show
+    install_master_page_number(lay.slide_master, 13.333, font=deck.font_en)
+    deck.layout = lay
+    if title_layout:
+        tl = prs.slide_layouts.get_by_name(title_layout)
+        tl._element.set("showMasterSp", "0")         # no number; layout art stays
+        deck.plain_layout = tl
+
+deck = create_deck(font_en="Calibri", font_ja="Yu Gothic", template="lab.potx")
+use_template(deck, "Title Only", "Title Slide")
+```
+
+`check_rules.py` must still pass on the result; a FAIL on the title slide's page
+number means the title layout still shows master shapes.
 
 ## Fixed layout (LAYOUT_WIDE, 13.333 x 7.5 in)
 
@@ -123,9 +192,9 @@ when there are one or two of them.
 - Two faces per deck: one for Latin text, one for Japanese. The default pair is
   **Calibri** and **Yu Gothic**; ask the user first (workflow step 0) and pass
   theirs to `createDeck({ fontEn, fontJa })` / `create_deck(font_en=, font_ja=)`.
-  Both kits split mixed strings run-by-run automatically — pass one string and it handles the switch, writing the
-  Latin face to `<a:latin>` and the Japanese face to `<a:ea>` so PowerPoint picks
-  the right one per glyph.
+  Both kits split mixed strings run-by-run automatically — pass one string and it
+  handles the switch, writing the Latin face to `<a:latin>` and the Japanese face
+  to `<a:ea>` so PowerPoint picks the right one per glyph.
 - Title 32pt and up, body 20pt and up. Text inside a diagram, flow chart, or any
   grouped shape is artwork, not slide copy: it is exempt from the font and size
   rules, and the audit skips it. Judge it by eye in the render instead — if a label
@@ -144,7 +213,9 @@ when there are one or two of them.
 - Bold marks highlighted numerals: write `**0.86**` or `**81,348 patches**` in a
   summary sentence and the kit renders that span bold (rule 7).
 - No color coding beyond black text, gray captions, and red enclosures. Red is
-  reserved for linkage (rule 8) so it keeps its meaning.
+  reserved for linkage (rule 8) so it keeps its meaning. Vector sketches use the
+  gray palette in *Visuals*; red inside a sketch marks the defect the summary
+  sentence names, which is linkage too.
 
 ## Writing the summary sentences
 
@@ -209,6 +280,124 @@ mark it (rule 8):
 One or two per slide. If a slide needs five enclosures, it is carrying two slides
 worth of content.
 
+## Visuals: vector first
+
+Diagrams, schematics, building sketches, cross-sections, flows, legends and marks
+are drawn from code as vectors. Never paste a screenshot of a diagram, a raster
+export, or an AI-generated picture in their place. In order of preference:
+
+1. **SVG written by code** — a Python string builder or a JS module that returns
+   SVG markup — placed with `add_svg()` below (vector `svgBlip` plus a PNG fallback
+   for old viewers). Use it for anything with many parts: building sketches,
+   DSM profiles, before/after panels. One SVG per evidence panel.
+2. **Native shapes** (`build_freeform` in python-pptx, `custGeom` / shapes in
+   pptxgenjs), grouped. Use when the user will edit labels or boxes in PowerPoint,
+   or for simple box-and-arrow flows.
+
+Raster (PNG/JPG) only for content that is an image: photos, aerial imagery,
+renders, result maps, screenshots of software.
+
+Write the drawing as reusable functions (a sketch module): one function per object,
+with its state as a parameter — `gable_building(..., missing=(i, n))`, a flat-roof
+building, a DSM profile, a footprint bar, check/cross marks. The same object then
+looks the same on every slide and in both halves of a before/after comparison.
+Change the parameter; do not redraw.
+
+**Style** (reference: building sketches in an AFD/SFD comparison deck):
+
+- Oblique view; each face one flat fill by orientation: front `D9D9D9`, side
+  `BFBFBF`, roof `8C8C8C`, back roof `A6A6A6`. White 1.5-unit strokes separate the
+  faces. No gradients, shadows, or dark outlines.
+- Defects: a red (`B2241E`) circle around the spot; a missing part as a white
+  polygon with a red dashed outline. A correct result carries no red.
+- Lines: data profiles `222222`, 3 units, round joins; ground and reference lines
+  `7F7F7F`, 2 units; arrows `595959` with one arrowhead.
+- Panels: light rounded rectangles (`F2F2F2` / `E7E6E6`), no border. A category
+  color (e.g. light blue for AI estimate, light orange for external data) only
+  when a legend on the slide defines it.
+- Result lists beside a sketch: ✗ in red for failures, ✓ in black for successes.
+- Text in the SVG uses the deck's faces (Japanese face first in the stack). Set
+  the viewBox to 100 units per inch of placed width, so font-size 20 = 14.4pt;
+  keep labels at 20 units or more. SVG text is artwork (exempt from the audit), but
+  it must be readable in the render.
+- Fill the evidence zone: size the viewBox to the zone's aspect (12.1 x 4.35 in →
+  1210 x 435) rather than placing a small drawing in a large empty area.
+
+```python
+import os, subprocess
+from lxml import etree
+from pptx.util import Inches
+from pptx.oxml.ns import qn
+from pptx.opc.package import Part
+from pptx.opc.packuri import PackURI
+from pptx.opc.constants import RELATIONSHIP_TYPE as RT
+
+SVG_NS = "http://schemas.microsoft.com/office/drawing/2016/SVG/main"
+FONT = "'Yu Gothic','YuGothic','Noto Sans CJK JP','Hiragino Sans',sans-serif"
+FACE = {"front": "#D9D9D9", "side": "#BFBFBF", "roof": "#8C8C8C", "roof_back": "#A6A6A6"}
+RED, INK = "#B2241E", "#222222"
+
+def add_svg(slide, svg_path, x, y, w, h=None):
+    """SVG as a vector picture with a PNG fallback; aspect kept inside w x h."""
+    vb = [float(v) for v in etree.parse(svg_path).getroot().get("viewBox").split()]
+    a = vb[3] / vb[2]
+    if h is None or h / w > a: h = w * a
+    else: w = h / a
+    png = os.path.splitext(svg_path)[0] + "_fb.png"
+    subprocess.run(["rsvg-convert", "-w", str(int(w * 200)), "-o", png, svg_path], check=True)
+    pic = slide.shapes.add_picture(png, Inches(x), Inches(y), Inches(w), Inches(h))
+    pkg = slide.part.package
+    part = Part(PackURI(str(pkg.next_partname("/ppt/media/image%d.svg"))),
+                "image/svg+xml", pkg, open(svg_path, "rb").read())
+    ext = etree.SubElement(etree.SubElement(pic._element.find(".//" + qn("a:blip")),
+          qn("a:extLst")), qn("a:ext"), uri="{96DAC541-7B7A-43D3-8B79-37D633B846F1}")
+    etree.SubElement(ext, "{%s}svgBlip" % SVG_NS, nsmap={"asvg": SVG_NS}).set(
+        qn("r:embed"), slide.part.relate_to(part, RT.IMAGE))
+    return pic
+
+def _poly(pts, fill, stroke="#FFFFFF", sw=1.5, dash=None):
+    d = f' stroke-dasharray="{dash}"' if dash else ""
+    p = " ".join(f"{a:.1f},{b:.1f}" for a, b in pts)
+    return f'<polygon points="{p}" fill="{fill}" stroke="{stroke}" stroke-width="{sw}"{d}/>'
+
+def gable_building(x, y, w=165, wall=52, ridge=61, depth=40, slope=34, missing=None):
+    """Oblique gable-roof building; front face bottom-left at (x, y), y = ground.
+    missing=(i, n): roof in n strips, strip i a red dashed gap with a red circle."""
+    top, ry, h = y - wall, y - wall - ridge, depth / 2
+    back = ry + 0.8 * slope
+    out = [_poly([(x+depth, back), (x+w+depth, back), (x+w+h, ry), (x+h, ry)], FACE["roof_back"]),
+           _poly([(x+w, y), (x+w+depth, y-slope), (x+w+depth, back), (x+w+h, ry), (x+w, top)], FACE["side"]),
+           _poly([(x, y), (x+w, y), (x+w, top), (x, top)], FACE["front"])]
+    n = missing[1] if missing else 1
+    s = w / n
+    for k in range(n):
+        pts = [(x+k*s, top), (x+(k+1)*s, top), (x+(k+1)*s+h, ry), (x+k*s+h, ry)]
+        gap = missing and k == missing[0]
+        out.append(_poly(pts, "#FFFFFF", RED, 2.5, "7,5") if gap else _poly(pts, FACE["roof"]))
+    if missing:
+        cx = x + (missing[0] + 0.5) * s + h
+        out.append(f'<circle cx="{cx:.1f}" cy="{ry:.1f}" r="13" fill="none" stroke="{RED}" stroke-width="2.5"/>')
+    return "\n".join(out)
+
+def label(x, y, text, size=20, bold=False, color=INK, anchor="middle"):
+    return (f'<text x="{x}" y="{y}" font-family="{FONT}" font-size="{size}" font-weight='
+            f'"{"bold" if bold else "normal"}" fill="{color}" text-anchor="{anchor}">{text}</text>')
+
+def svg_doc(width, height, body):   # 100 units per placed inch
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{width*2}" height="{height*2}" '
+            f'viewBox="0 0 {width} {height}">{body}</svg>')
+
+# usage: before/after sketch filling the evidence zone
+body = (gable_building(150, 330, missing=(1, 3)) + label(250, 380, "AIなし：屋根面の欠落", bold=True, color=RED)
+        + gable_building(750, 330) + label(850, 380, "AIあり：閉じた LoD2 形状", bold=True))
+open("sketch.svg", "w").write(svg_doc(1210, 435, body))
+add_svg(slide, "sketch.svg", 0.6, 2.75, 12.1, 4.35)
+```
+
+`rsvg-convert` makes the fallback (`cairosvg` works too). In pptxgenjs, write the SVG
+the same way from a JS module and add it with `slide.addImage({ path: 'sketch.svg' })`,
+then check the render. LibreOffice previews draw the SVG, so judge it there.
+
 ## Scripts
 
 | Script | Use |
@@ -217,6 +406,8 @@ worth of content.
 | `scripts/slide_kit.py` | same kit on `python-pptx`, snake_case: `create_deck`, `add_content_slide`, `add_chapter_slide`, `add_title_slide`, `add_closing_slide`, `fit_images`, `red_box`, `balloon`, `caption`, then `deck.save(path)` |
 | `scripts/check_rules.py deck.pptx [--font-en F --font-ja F]` | Audits fonts, sizes, bullet counts, page number, margins, evidence-zone use. FAIL must be fixed; WARN needs a reason |
 | `scripts/page_number.py` | `number_deck_on_master(prs)` — retrofits a deck you did not generate: puts the 28pt black `slidenum` field on each slide master and hides master shapes on the title and acknowledgement slides. Returns a report; tell the user about slides in `hidden_also` (other master graphics hidden there too) and `per_slide` (old per-slide numbers left in place) |
+| `scripts/slide_kit.py` `use_template(deck, content_layout, title_layout)` | applies a custom template (see *Custom template*): drops sample slides, numbers the content layout, hides the number on the template's title layout |
+| `scripts/svg_kit.py` | vector visuals (see *Visuals*): `add_svg` (svgBlip + PNG fallback), `svg_doc`, `label`, `gable_building` |
 
 Minimal generator:
 
